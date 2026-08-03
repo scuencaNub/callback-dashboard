@@ -1,0 +1,17 @@
+{
+    "httpMethod": "GET",
+    "path": "/getHolidayCalendar",
+    "headers": {
+        "Content-Type": "application/json"
+    },
+    "isBase64Encoded": false,
+    "requestContext": {
+        "accountId": "123456789012",
+        "apiId": "test-api-id",
+        "stage": "Prod",
+        "requestId": "test-request-id",
+        "identity": {
+            "sourceIp": "127.0.0.1"
+        }
+    }
+}

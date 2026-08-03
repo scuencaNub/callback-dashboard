@@ -1,0 +1,19 @@
+{
+  "httpMethod": "GET",
+  "path": "/reports",
+  "resource": "/reports",
+  "headers": {
+    "Authorization": "Bearer local-test-token"
+  },
+  "queryStringParameters": null,
+  "pathParameters": null,
+  "requestContext": {
+    "authorizer": {
+      "claims": {
+        "email": "testcrtbppr@test.com",
+        "cognito:username": "64288418-6041-70b4-7f31-2b7e6f41cc62"
+      }
+    }
+  },
+  "body": null
+}

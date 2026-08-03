@@ -1,0 +1,15 @@
+{
+    "Records": [
+        {
+            "messageId": "test-id-1",
+            "receiptHandle": "test-handle",
+            "body": "{\"reportId\": \"f94aa007-dde8-4c8a-bca6-29d91ea3e5e2\", \"type\": \"CALLBACKS_BY_DATE\"}",
+            "attributes": {
+                "ApproximateReceiveCount": "1"
+            },
+            "eventSource": "aws:sqs",
+            "eventSourceARN": "arn:aws:sqs:us-east-1:123456789012:dummy",
+            "awsRegion": "us-east-1"
+        }
+    ]
+}

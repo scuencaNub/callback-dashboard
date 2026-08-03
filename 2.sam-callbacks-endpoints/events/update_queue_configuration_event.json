@@ -1,0 +1,21 @@
+{
+    "httpMethod": "PUT",
+    "path": "/queue-configurations/arn:aws:connect:us-east-1:833469488738:instance/1a73fe90-89b4-4bbf-8726-33777b4b7519/queue/d877594f-7e39-4252-85ec-271f63646c1f",
+    "pathParameters": {
+        "queue_id": "arn:aws:connect:us-east-1:833469488738:instance/1a73fe90-89b4-4bbf-8726-33777b4b7519/queue/d877594f-7e39-4252-85ec-271f63646c1f"
+    },
+    "headers": {
+        "Content-Type": "application/json"
+    },
+    "body": "{\"max_retry_attempts\": 3, \"retry_attempt_interval\": 900, \"stop_on_voicemail\": true, \"allowed_callback_type\": \"ALLOW_SCHEDULING\", \"allow_only_next_day\": false, \"business_hours_custom_message\": \"Updated message\", \"business_hours_enable\": true}",
+    "isBase64Encoded": false,
+    "requestContext": {
+        "accountId": "123456789012",
+        "apiId": "test-api-id",
+        "stage": "Prod",
+        "requestId": "test-request-id",
+        "identity": {
+            "sourceIp": "127.0.0.1"
+        }
+    }
+}

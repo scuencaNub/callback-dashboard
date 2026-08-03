@@ -1,0 +1,19 @@
+bucket:
+bpac-crt-callback-cloudfront-bucket
+
+cloudfront:
+
+
+aws cloudfront create-invalidation --distribution-id E3UPSG4S1H5Y15 --paths "/*" --profile BPAC-PRD-833469488738-DV
+
+Key                 CloudFrontDistribution
+Description         -
+Value               E3UPSG4S1H5Y15
+
+Key                 CloudFrontURL
+Description         CloudFront Distribution URL
+Value               https://d307ougnwiq2v9.cloudfront.net
+
+Key                 FrontendBucket
+Description         -
+Value               bpac-crt-callback-cloudfront-bucket

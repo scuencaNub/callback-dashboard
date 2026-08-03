@@ -1,0 +1,44 @@
+# More information about the configuration file can be found here:
+# https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-config.html
+version = 0.1
+
+[default.global.parameters]
+stack_name = "BPAC-PRD-callbacks-beta"
+s3_bucket = "bpac-prd-cognito-callback-bucket"
+
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate.parameters]
+lint = true
+
+[default.deploy.parameters]
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = true
+s3_bucket = "bpac-prd-cognito-callback-bucket"
+tags = "Application=callback-app Environment=beta"
+
+parameter_overrides = "Environment=\"prd\" DynamoDBTableName=\"BPAC-PRD-BPPR-ACE-TableCallsInSystem-1RAXWEJQ4WJMI\" HolidayCalendarTableName=\"BPAC-PRD-BPPR-ACE-TableHolidayCalendar-8BONEG9RUGIC\" QueueConfigurationTableName=\"BPAC-PRD-BPPR-ACE-TableQueueConfiguration-V7RRCAXX7HXA\" CallbackConcurrencyMetricsTableName=\"BPAC-PRD-CallbackConcurrencyMetrics\" DynamoDBRegion=\"us-east-1\" DynamoDBUri=\"\" CallbackConfigurationParameterName=\"/bppr-amazon-connect-extensions/PRD/callback-configuration\" CognitoUserPoolId=\"us-east-1_tJImiT9rX\" UserAclTableName=\"BPAC-PRD-Callback-UserAcl-beta\" AthenaDatabase=\"bpac-prd-callback-analytics\" AthenaOutputBucket=\"bpac-prd-athena-queries-callback\" AthenaOutputPrefix=\"/\" AthenaTableName=\"calls_in_system_consume\" CallbackReportsTableName=\"BPAC-PRD-CallbackReports-beta\" CallbackReportJobsQueueName=\"BPAC-PRD-CallbackReportJobs-beta\" QueueRegisterStatsTableName=\"BPAC-PRD-Callback-QueueRegisterStats\" QueueGroupInfoTableName=\"BPAC-PRD-queue-group-info-prd\" CorsAllowedOrigin=\"*\" AniBlockedTableName=\"BPAC-PRD-ani-blocked-beta\" ActiveContactsInFlowTableName=\"BPAC-PRD-Callback-ActiveContactsInFlow\" RegistrationIndexTableName=\"BPAC-PRD-Callback-RegistrationIndex\""
+
+s3_prefix = "callback-endpoints"
+region = "us-east-1"
+image_repositories = []
+stack_name = "BPAC-PRD-callbacks-beta"
+
+[default.package.parameters]
+resolve_s3 = true
+
+[default.sync.parameters]
+watch = true
+
+[default.local_start_api.parameters]
+warm_containers = "EAGER"
+# Para desarrollo local, configurar variables de entorno para las Lambdas
+# Si usás DynamoDB Local, cambiar DYNAMODB_URI a "http://localhost:8000"
+# Si usás DynamoDB real, asegurate de tener credenciales AWS configuradas
+env_file = "env.json"
+
+[default.local_start_lambda.parameters]
+warm_containers = "EAGER"
+

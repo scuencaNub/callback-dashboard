@@ -1,0 +1,18 @@
+{
+    "httpMethod": "PUT",
+    "path": "/callback-configuration",
+    "headers": {
+        "Content-Type": "application/json"
+    },
+    "body": "{\"status\": false, \"mode\": \"AUTOMATIC\", \"activation_threshold\": 10, \"deactivation_threshold\": 5, \"priority_mode\": \"CUSTOMER\", \"schedule_programming\": [{\"day\": \"MONDAY\", \"start_at\": \"08:00\", \"end_at\": \"18:00\", \"status\": true}, {\"day\": \"TUESDAY\", \"start_at\": \"08:00\", \"end_at\": \"18:00\", \"status\": true}, {\"day\": \"WEDNESDAY\", \"start_at\": \"08:00\", \"end_at\": \"18:00\", \"status\": true}, {\"day\": \"THURSDAY\", \"start_at\": \"08:00\", \"end_at\": \"18:00\", \"status\": true}, {\"day\": \"FRIDAY\", \"start_at\": \"08:00\", \"end_at\": \"18:00\", \"status\": true}, {\"day\": \"SATURDAY\", \"start_at\": null, \"end_at\": null, \"status\": false}, {\"day\": \"SUNDAY\", \"start_at\": null, \"end_at\": null, \"status\": false}]}",
+    "isBase64Encoded": false,
+    "requestContext": {
+        "accountId": "123456789012",
+        "apiId": "test-api-id",
+        "stage": "Prod",
+        "requestId": "test-request-id",
+        "identity": {
+            "sourceIp": "127.0.0.1"
+        }
+    }
+}

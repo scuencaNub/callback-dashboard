@@ -1,0 +1,20 @@
+Cuando termina el informe, ¿dónde guardarlo?
+Para tu caso (mostrar tabla + descargar CSV), el patrón correcto es:
+
+DynamoDB: solo metadatos del job (estado, usuario, fechas, link resultado).
+S3: archivo resultado del reporte (CSV o JSONL/Parquet).
+No guardes 10k+ filas en DynamoDB como resultado; te encarece y complica lectura.
+
+¿Cómo mostrar tabla + descargar CSV?
+Descarga CSV: directo desde S3 con presigned URL (ideal).
+Vista tabla:
+Opción simple: frontend lee el CSV (si no es gigante).
+Opción robusta: endpoint backend que pagina resultados desde S3/Athena.
+Límites con 10k+ registros
+CSV descarga: 10k, 50k, 100k filas va bien (depende peso final).
+Mostrar como tabla en frontend:
+10k en memoria puede empezar a ponerse lento.
+50k+ suele degradar UX fuerte (render, filtros, RAM del navegador).
+Recomendado:
+Tabla paginada en frontend (server-side pagination ideal).
+Mostrar preview (ej. primeros 500/1000) + botón “Descargar completo”.

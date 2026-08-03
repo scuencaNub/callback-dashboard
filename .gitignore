@@ -1,0 +1,48 @@
+# SAM build artifacts
+**/.aws-sam/
+2.sam-callbacks-endpoints/floci-data/
+
+# local env overrides — contain API URLs, Cognito config, credentials
+# never commit these; use .env.example as reference
+**/.env.local
+**/.env.*.local
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+*.zip
+
+# Node / frontend
+**/node_modules/
+**/dist/
+
+# local dev configs
+2.sam-callbacks-endpoints/env.local.json
+2.sam-callbacks-endpoints/env.json
+
+# build logs (generated artifacts, not source)
+2.sam-callbacks-endpoints/*_log*.txt
+2.sam-callbacks-endpoints/*_log.txt
+2.sam-callbacks-endpoints/build_*.txt
+2.sam-callbacks-endpoints/fix_build*.txt
+2.sam-callbacks-endpoints/full_build*.txt
+2.sam-callbacks-endpoints/single_build*.txt
+2.sam-callbacks-endpoints/sam_build*.txt
+2.sam-callbacks-endpoints/deploy_*.txt
+
+# archives
+*.tar.gz
+*.zip
+
+# OS
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+*.swp
+
+# Kiro workspace config (local tool config, not project code)
+.kiro/

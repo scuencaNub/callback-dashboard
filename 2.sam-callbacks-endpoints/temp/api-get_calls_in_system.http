@@ -1,0 +1,142 @@
+### Variables
+@baseUrl = https://wqgu3ua2he.execute-api.us-west-2.amazonaws.com/Prod
+@apiPath = /getCallsInSystem
+# https://wqgu3ua2he.execute-api.us-west-2.amazonaws.com/Prod/getCallsInSystem
+#https://wqgu3ua2he.execute-api.us-west-2.amazonaws.com/Prod/getCallsInSystem
+### Get Callbacks - Primera página (sin paginación)
+POST {{baseUrl}}{{apiPath}}
+Content-Type: application/json
+
+{
+  "page_size": 100
+}
+
+### Get Callbacks - Con paginación (segunda página)
+# Reemplaza el next_page_token con el valor real de la respuesta anterior
+POST {{baseUrl}}{{apiPath}}
+Content-Type: application/json
+
+{
+  "page_size": 100,
+  "next_page_token": [
+    {
+      "status": "PENDING",
+      "offset": {
+        "status": "PENDING",
+        "call_at": "2024-01-01T00:00:00Z",
+        "contact_id_inbound": "3e724687-a280-447a-810d-asdasd"
+      }
+    }
+  ]
+}
+
+### Get Callbacks - Página grande (1000 items)
+POST {{baseUrl}}{{apiPath}}
+Content-Type: application/json
+
+{
+  "page_size": 1000
+}
+
+### Get Callbacks - Últimos 60 días (agosto-septiembre)
+# El Lambda buscará automáticamente desde hace 60 días hasta hoy
+POST {{baseUrl}}{{apiPath}}
+Content-Type: application/json
+
+{
+  "page_size": 1000
+}
+
+### Get Callbacks - Fecha específica (2025-09-15)
+POST {{baseUrl}}{{apiPath}}
+Content-Type: application/json
+
+{
+  "page_size": 100,
+  "start_date": "2025-09-15"
+}
+
+### Get Callbacks - Rango de fechas (agosto-septiembre)
+POST {{baseUrl}}{{apiPath}}
+Content-Type: application/json
+
+{
+  "page_size": 1000,
+  "start_date": "2025-08-01",
+  "end_date": "2025-09-30"
+}
+
+### Get Holiday Calendar (sin auth - debería fallar si tiene authorizer)
+GET {{baseUrl}}/getHolidayCalendar
+Accept: application/json
+
+### Get Holiday Calendar (con token Cognito)
+GET {{baseUrl}}/getHolidayCalendar
+Accept: application/json
+Authorization: Bearer eyJraWQiOiJaUlZCNjBXXC84QTBSQzZVOEtsbURXTldHd2lUQmdFdFBVTDBJNkFEWlNwOD0iLCJhbGciOiJSUzI1NiJ9.eyJhdF9oYXNoIjoidzVCelhYenFjMWhmS0FLc2VtTmdDQSIsInN1YiI6Ijg4NjFhMzAwLTcwMzEtNzAyOS02NGNmLWY1ZjAyOGQ1OTVkYyIsImNvZ25pdG86Z3JvdXBzIjpbInVzLXdlc3QtMl9QWXFycEVBVHVfQXp1cmUiXSwiZW1haWxfdmVyaWZpZWQiOmZhbHNlLCJpc3MiOiJodHRwczpcL1wvY29nbml0by1pZHAudXMtd2VzdC0yLmFtYXpvbmF3cy5jb21cL3VzLXdlc3QtMl9QWXFycEVBVHUiLCJjb2duaXRvOnVzZXJuYW1lIjoiQXp1cmVfR3VpbGxlcm1vLkNhc2Vyb3R0b0BldmVydGVjaW5jLmNvbSIsIm9yaWdpbl9qdGkiOiJlZmUyYmYyMS1kODJkLTQ5YWItYmUyNS1lYjM3NWRkM2MzNjciLCJhdWQiOiI2cGlvMDBkZDlla2dmMGpkYmNmMmg3anFkMSIsImlkZW50aXRpZXMiOlt7ImRhdGVDcmVhdGVkIjoiMTc2MDcyMzMwMjQ0NCIsInVzZXJJZCI6Ikd1aWxsZXJtby5DYXNlcm90dG9AZXZlcnRlY2luYy5jb20iLCJwcm92aWRlck5hbWUiOiJBenVyZSIsInByb3ZpZGVyVHlwZSI6IlNBTUwiLCJpc3N1ZXIiOiJodHRwczpcL1wvc3RzLndpbmRvd3MubmV0XC8yYjViN2Q3Ny1mMTliLTRjNmQtYjE4MC01NzY4YzA5YWQ0M2JcLyIsInByaW1hcnkiOiJ0cnVlIn1dLCJ0b2tlbl91c2UiOiJpZCIsImF1dGhfdGltZSI6MTc2MDk2ODEzNSwibmFtZSI6Ikd1aWxsZXJtby5DYXNlcm90dG9AZXZlcnRlY2luYy5jb20iLCJleHAiOjE3NjI5NzAyMjgsImlhdCI6MTc2Mjk2NjYyOCwianRpIjoiOTBkNzY5MzgtMDUwOS00ZGNmLTlmMDktM2I4MWM5MWY5ZGQ5IiwiZW1haWwiOiJHdWlsbGVybW8uQ2FzZXJvdHRvQG51Yml0eS5jb20ifQ.LOe0t_lrITBkrS11XldB6lFCEzm27gjSiL1jbP3CuycFf22m5MQv-IbZWEdwmTx9GK62Xi4J5pyh2_bhEl2CFqsgBzXcKtXZ4ocI2q9cHbRuVftJwpWuQ62zRxfxAhpGnaLdkqgR_7-UBdaIp7os7-MerTn-xmGAOfgb6jjVbKedp4BE44J0zNWCjLX-NAvZEUEzK1biIO9bMKRyWgt9JzhRWqh2EkcExg-c1hp175P60Vcymrp06HpF8X8qqLtVANbgoBvxVAPhU0N9Z68fNx_COV-ZY-RTHJ9a65O9-kirWJ1R7m-Jm_lbMLSsRfNztYK4gucaPSrndUXDn_6H8w
+
+### Get Queue Configuration
+# Returns: { "items": [...], "count": number }
+# Each item contains: queue_id, queue_name, max_retry_attempts, retry_attempt_interval, 
+# stop_on_voicemail, business_hours_enable, stop_time_asap_enable, start_time_asap, 
+# stop_time_asap, ewt_max_minutes_enable, ewt_max_minutes, allowed_callback_type, 
+# allow_only_next_day, business_hours_custom_message, phone_number_for_client, 
+# outbound_phone_number, flow_arn
+GET https://g6uscg6485.execute-api.us-east-1.amazonaws.com/Prod/queue-configurations
+Accept: application/json
+
+
+
+CloudFormation outputs from deployed stack
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Outputs
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Key                 GetCallsInSystemFunction
+Description         Get Calls In System Lambda Function ARN
+Value               arn:aws:lambda:us-west-2:825765398662:function:sam-get-calls-in-system-GetCallsInSystemFunction-L9r9Ss1N4xs5
+
+Key                 GetCallbackConfigurationApi
+Description         API Gateway endpoint URL for Prod stage for Get Callback Configuration function
+Value               https://wqgu3ua2he.execute-api.us-west-2.amazonaws.com/Prod/callback-configuration
+
+Key                 GetCallsInSystemFunctionIamRole
+Description         Implicit IAM Role created for Get Calls In System function
+Value               arn:aws:iam::825765398662:role/sam-get-calls-in-system-GetCallsInSystemFunctionRol-v45QrUWTvf4D
+
+Key                 GetQueueConfigurationApi
+Description         API Gateway endpoint URL for Prod stage for Get Queue Configuration function
+Value               https://wqgu3ua2he.execute-api.us-west-2.amazonaws.com/Prod/queue-configurations
+
+Key                 GetCallsInSystemApi
+Description         API Gateway endpoint URL for Prod stage for Get Calls In System function
+Value               https://wqgu3ua2he.execute-api.us-west-2.amazonaws.com/Prod/getCallsInSystem
+
+Key                 GetHolidayCalendarFunctionIamRole
+Description         Implicit IAM Role created for Get Holiday Calendar function
+Value               arn:aws:iam::825765398662:role/sam-get-calls-in-system-GetHolidayCalendarFunctionR-B09l2cHrAnVE
+
+Key                 GetHolidayCalendarApi
+Description         API Gateway endpoint URL for Prod stage for Get Holiday Calendar function
+Value               https://wqgu3ua2he.execute-api.us-west-2.amazonaws.com/Prod/getHolidayCalendar
+
+Key                 GetQueueConfigurationFunction
+Description         Get Queue Configuration Lambda Function ARN
+Value               arn:aws:lambda:us-west-2:825765398662:function:sam-get-calls-in-system-GetQueueConfigurationFunct-xhaqK8mQbASN
+
+Key                 GetCallbackConfigurationFunction
+Description         Get Callback Configuration Lambda Function ARN
+Value               arn:aws:lambda:us-west-2:825765398662:function:sam-get-calls-in-system-GetCallbackConfigurationFu-BRvLrInwV2LJ
+
+Key                 GetCallbackConfigurationFunctionIamRole
+Description         Implicit IAM Role created for Get Callback Configuration function
+Value               arn:aws:iam::825765398662:role/sam-get-calls-in-system-GetCallbackConfigurationFun-XOF0fXVRy0Kw
+
+Key                 GetHolidayCalendarFunction
+Description         Get Holiday Calendar Lambda Function ARN
+Value               arn:aws:lambda:us-west-2:825765398662:function:sam-get-calls-in-system-GetHolidayCalendarFunction-7EUgTlwp1a0G
+
+Key                 GetQueueConfigurationFunctionIamRole
+Description         Implicit IAM Role created for Get Queue Configuration function
+Value               arn:aws:iam::825765398662:role/sam-get-calls-in-system-GetQueueConfigurationFuncti-Z6suOGBgSOYy
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+

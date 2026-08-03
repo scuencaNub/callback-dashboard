@@ -1,0 +1,19 @@
+{
+  "resource": "/reports/callbacks/by-date",
+  "path": "/reports/callbacks/by-date",
+  "httpMethod": "POST",
+  "headers": {
+    "Authorization": "Bearer REPLACE_WITH_VALID_JWT",
+    "Content-Type": "application/json"
+  },
+  "requestContext": {
+    "authorizer": {
+      "claims": {
+        "email": "testcrtbppr@test.com",
+        "cognito:username": "testcrt-user"
+      }
+    }
+  },
+  "body": "{\"start_date\": \"2026-03-10\", \"end_date\": \"2026-03-10\", \"phone_numbers\": []}",
+  "isBase64Encoded": false
+}

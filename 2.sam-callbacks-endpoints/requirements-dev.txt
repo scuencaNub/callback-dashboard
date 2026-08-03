@@ -1,0 +1,6 @@
+# Development dependencies - type stubs for IDE autocompletion and mypy
+# These are NOT needed at runtime in Lambda
+mypy-boto3-dynamodb~=1.38.4
+mypy-boto3-ssm~=1.38.4
+mypy-boto3-stepfunctions~=1.38.4
+mypy-boto3-scheduler~=1.38.4

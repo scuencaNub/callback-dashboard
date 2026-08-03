@@ -1,0 +1,8 @@
+{
+  "httpMethod": "POST",
+  "path": "/callback-history/query",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\"start_date\": \"2024-01-01\", \"end_date\": \"2025-12-31\", \"page_size\": 500}"
+}

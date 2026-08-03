@@ -1,0 +1,7 @@
+{
+    "httpMethod": "DELETE",
+    "path": "/holiday-calendars/2025-12-25",
+    "pathParameters": {
+        "date": "2025-12-25"
+    }
+}

@@ -1,0 +1,63 @@
+Proceso de desarrollo y despliegue por ambientes
+===============================================
+
+Objetivo
+--------
+Separar desarrollo, validacion y produccion para:
+- desarrollar rapido sin romper nada,
+- probar con datos reales en cuenta PRD sin impactar produccion,
+- promover cambios con menor riesgo.
+
+Ambientes
+---------
+1) CRT (desarrollo)
+- Cuenta/entorno de desarrollo.
+- Uso principal: implementar features, corregir bugs, pruebas tecnicas.
+- Config SAM: samconfig-crt.toml.
+- Frontend local: .env.crt.local.
+
+2) BETA (validacion en cuenta PRD)
+- Stack separado en cuenta PRD para pruebas realistas.
+- Uso principal: smoke/integration testing con datos y permisos reales de PRD sin tocar el stack productivo.
+- Config SAM: samconfig-beta.toml.
+- Frontend local: .env.beta.local.
+- Recursos propios con sufijo -beta cuando aplica (por ejemplo tablas/colas creadas por el template).
+
+3) PRD (produccion real)
+- Stack productivo final.
+- Uso principal: trafico real de usuarios.
+- Config SAM: samconfig-prd.toml.
+- Frontend local: .env.prd.local.
+
+Versionado de Lambdas y alias
+-----------------------------
+- Se habilito AutoPublishAlias: live en las funciones SAM.
+- Resultado esperado por deploy con cambios:
+  - se publica version inmutable,
+  - se actualiza alias live a la version nueva.
+- API Gateway debe invocar por alias (live), no por $LATEST.
+
+Archivos clave
+--------------
+- Backend SAM:
+  - template.yaml
+  - samconfig-crt.toml
+  - samconfig-beta.toml
+  - samconfig-prd.toml
+- Frontend:
+  - .env.crt.local
+  - .env.beta.local
+  - .env.prd.local
+
+Regla de trabajo recomendada
+----------------------------
+1. Desarrollar y probar primero en CRT.
+2. Desplegar a BETA (en cuenta PRD) para validar con escenario real.
+3. Validar endpoints, permisos, integraciones y comportamiento funcional.
+4. Promover a PRD solo cuando BETA este OK.
+
+Beneficios del esquema
+----------------------
+- Menor riesgo de romper produccion.
+- Pruebas mas confiables antes de salida.
+- Trazabilidad clara de que se prueba y que se promueve.

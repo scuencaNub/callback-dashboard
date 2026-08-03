@@ -1,0 +1,12 @@
+{
+  "httpMethod": "OPTIONS",
+  "path": "/getCallsInSystem",
+  "resource": "/getCallsInSystem",
+  "headers": {
+    "Origin": "http://localhost:3000"
+  },
+  "requestContext": {
+    "requestId": "local-smoke-test-get-calls-in-system"
+  },
+  "isBase64Encoded": false
+}

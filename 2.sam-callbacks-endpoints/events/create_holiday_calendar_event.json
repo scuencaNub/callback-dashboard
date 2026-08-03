@@ -1,0 +1,18 @@
+{
+    "httpMethod": "POST",
+    "path": "/holiday-calendars",
+    "headers": {
+        "Content-Type": "application/json"
+    },
+    "body": "{\"date\": \"2025-12-27\", \"name\": \"Christmas\", \"description\": \"Christmas Day\", \"configuration_type\": \"Completely disable callbacks\", \"queue_overrides\": {}}",
+    "isBase64Encoded": false,
+    "requestContext": {
+        "accountId": "123456789012",
+        "apiId": "test-api-id",
+        "stage": "Prod",
+        "requestId": "test-request-id",
+        "identity": {
+            "sourceIp": "127.0.0.1"
+        }
+    }
+}

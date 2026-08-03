@@ -1,0 +1,1393 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sam-get-calls-in-system
+
+  SAM Template for Get Calls In System API
+  Provides Lambda function and API Gateway endpoint to retrieve paginated calls in system records
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 120
+    MemorySize: 256
+    Environment:
+      Variables:
+        CORS_ALLOWED_ORIGIN: !Ref CorsAllowedOrigin
+  Api:
+    Auth:
+      Authorizers:
+        CognitoAuthorizer:
+          UserPoolArn: !Sub 'arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${CognitoUserPoolId}'
+          Identity:
+            Header: Authorization
+            ReauthorizeEvery: 0
+    Cors:
+      AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
+      AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+      AllowOrigin: !Sub "'${CorsAllowedOrigin}'"
+      MaxAge: "'3600'"
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - crt
+      - prd
+    Default: crt
+  DynamoDBTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing calls in system records
+  HolidayCalendarTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing holiday calendar records
+  QueueConfigurationTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing queue configuration records
+  QueueOperationHoursTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing queue operation hours (open/close per day)
+    Default: BPAC-PRD-BPPR-ACE-TableQueueOperationHours-1P3EC19D2UXWZ
+  CallbackLimitAsap:
+    Type: Number
+    Description: Max callbacks per 15-min slot for ASAP (matches MAX_CALLBACKS_PER_SLOT in GetEwtValue)
+    Default: 120
+  CallbackLimitSchedule:
+    Type: Number
+    Description: Max callbacks per 15-min slot for SCHEDULE (matches the limit in GetSchedulePrompts)
+    Default: 20
+  CallbackConcurrencyMetricsTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing callback concurrency metrics records
+  UserAclTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing user ACL (email -> role)
+  DynamoDBRegion:
+    Type: String
+    Description: AWS Region for DynamoDB
+    Default: us-east-1
+  DynamoDBUri:
+    Type: String
+    Description: DynamoDB endpoint URI (leave empty for production)
+    Default: ""
+  CallbackConfigurationParameterName:
+    Type: String
+    Description: Name of the SSM Parameter containing callback configuration
+    Default: /bppr-amazon-connect-extensions/DEV/callback-configuration
+  CognitoUserPoolId:
+    Type: String
+    Description: Cognito User Pool ID for API authorization
+    Default: us-east-1_LCAVcYQx7
+  CorsAllowedOrigin:
+    Type: String
+    Description: Allowed CORS origin (use * for testing/CRT)
+    Default: "*"
+
+  AthenaDatabase:
+    Type: String
+    Description: Athena database name for Connect contacts queries
+  AthenaOutputBucket:
+    Type: String
+    Description: S3 bucket for Athena query results
+  AthenaOutputPrefix:
+    Type: String
+    Description: S3 prefix for Athena query results
+  AthenaTableName:
+    Type: String
+    Description: Athena table name for Connect contacts queries
+  CallbackReportsTableName:
+    Type: String
+    Description: Name of the DynamoDB table for callback reports jobs
+  CallbackReportJobsQueueName:
+    Type: String
+    Description: Name of the SQS queue for callback report jobs
+  QueueRegisterStatsTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing queue register stats (cust_registered, cust_register_pending)
+  QueueGroupInfoTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing queue group info (after_threshold_behavior)
+  AniBlockedTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing blocked ANIs
+    Default: BPAC-PRD-ani-blocked
+  ActiveContactsInFlowTableName:
+    Type: String
+    Description: Name of the DynamoDB table containing per-contact callback journey (offered/selected type/outcome)
+    Default: ""
+  RegistrationIndexTableName:
+    Type: String
+    Description: Name of the DynamoDB table indexing CallsInSystem by (queue_name, cb_registered_at), kept in sync via DynamoDB Streams
+    Default: ""
+
+# Conditions:
+#   IsProd: !Equals [!Ref Environment, prd]
+
+Resources:
+  SharedLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: shared_layer/
+      CompatibleRuntimes:
+        - python3.12
+
+  UserAclTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref UserAclTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: email
+          AttributeType: S
+      KeySchema:
+        - AttributeName: email
+          KeyType: HASH
+
+  # AniBlockedTable is not created by this stack: the table BPAC-PRD-ani-blocked
+  # already exists in the account (productive) and is referenced by name via the
+  # AniBlockedTableName parameter, same as the other productive tables
+  # (CallsInSystem, QueueConfiguration, etc.). Declaring it as a resource here
+  # collides with the existing table (ResourceExistenceCheck).
+
+  CallbackReportsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      TableName: !Ref CallbackReportsTableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: reportId
+          AttributeType: S
+        - AttributeName: createdByNormalized
+          AttributeType: S
+        - AttributeName: createdAt
+          AttributeType: S
+      KeySchema:
+        - AttributeName: reportId
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: CreatedByCreatedAtIndex
+          KeySchema:
+            - AttributeName: createdByNormalized
+              KeyType: HASH
+            - AttributeName: createdAt
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  CallbackReportsBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireCallbackReportsAfter7Days
+            Status: Enabled
+            ExpirationInDays: 7
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins:
+              - "http://localhost:3000"
+              - "https://d859kntxq6gml.cloudfront.net"
+              - "https://d1f2o9mv2do2d5.cloudfront.net"
+            AllowedMethods:
+              - GET
+            AllowedHeaders:
+              - "*"
+            ExposedHeaders:
+              - Content-Length
+              - Content-Type
+            MaxAge: 3000
+
+  CallbackReportJobsQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Ref CallbackReportJobsQueueName
+      VisibilityTimeout: 960
+
+  GetCallsInSystemFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: get_calls_in_system/
+      Handler: app.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
+      Events:
+        GetCallsInSystem:
+          Type: Api
+          Properties:
+            Path: /getCallsInSystem
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetCallsInSystemOptions:
+          Type: Api
+          Properties:
+            Path: /getCallsInSystem
+            Method: options
+      AutoPublishAlias: live
+    
+  UpdateCallsInSystemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: update_calls_in_system/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoDBTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        UpdateCallsInSystem:
+          Type: Api
+          Properties:
+            Path: /calls-in-system/{contact_id_inbound}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+        UpdateCallsInSystemOptions:
+          Type: Api
+          Properties:
+            Path: /calls-in-system/{contact_id_inbound}
+            Method: options
+      AutoPublishAlias: live
+    
+  GetHolidayCalendarFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_holiday_calendar/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_TABLE_NAME: !Ref HolidayCalendarTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref HolidayCalendarTableName
+      Events:
+        GetHolidayCalendar:
+          Type: Api
+          Properties:
+            Path: /getHolidayCalendar
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetHolidayCalendarOptions:
+          Type: Api
+          Properties:
+            Path: /getHolidayCalendar
+            Method: options
+      AutoPublishAlias: live
+    
+  CreateHolidayCalendarFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: create_holiday_calendar/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_TABLE_NAME: !Ref HolidayCalendarTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref HolidayCalendarTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        CreateHolidayCalendar:
+          Type: Api
+          Properties:
+            Path: /holiday-calendars
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        CreateHolidayCalendarOptions:
+          Type: Api
+          Properties:
+            Path: /holiday-calendars
+            Method: options
+      AutoPublishAlias: live
+    
+  UpdateHolidayCalendarFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: update_holiday_calendar/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_TABLE_NAME: !Ref HolidayCalendarTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref HolidayCalendarTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        UpdateHolidayCalendar:
+          Type: Api
+          Properties:
+            Path: /holiday-calendars/{date}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+      AutoPublishAlias: live
+    
+  DeleteHolidayCalendarFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: delete_holiday_calendar/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_TABLE_NAME: !Ref HolidayCalendarTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref HolidayCalendarTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        DeleteHolidayCalendar:
+          Type: Api
+          Properties:
+            Path: /holiday-calendars/{date}
+            Method: delete
+            Auth:
+              Authorizer: CognitoAuthorizer
+        DeleteHolidayCalendarOptions:
+          Type: Api
+          Properties:
+            Path: /holiday-calendars/{date}
+            Method: options
+      AutoPublishAlias: live
+    
+  GetQueueConfigurationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_queue_configuration/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_TABLE_NAME: !Ref QueueConfigurationTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref QueueConfigurationTableName
+      Events:
+        GetQueueConfiguration:
+          Type: Api
+          Properties:
+            Path: /queue-configurations
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetQueueConfigurationOptions:
+          Type: Api
+          Properties:
+            Path: /queue-configurations
+            Method: options
+      AutoPublishAlias: live
+    
+  UpdateQueueConfigurationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: update_queue_configuration/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_TABLE_NAME: !Ref QueueConfigurationTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref QueueConfigurationTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        UpdateQueueConfiguration:
+          Type: Api
+          Properties:
+            Path: /queue-configurations/{queue_name}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+        UpdateQueueConfigurationOptions:
+          Type: Api
+          Properties:
+            Path: /queue-configurations/{queue_name}
+            Method: options
+      AutoPublishAlias: live
+    
+  GetCallbackConfigurationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_callback_configuration/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          PARAMETER_NAME: !Ref CallbackConfigurationParameterName
+          AWS_ENDPOINT_URL: !Ref DynamoDBUri
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${CallbackConfigurationParameterName}'
+      Events:
+        GetCallbackConfiguration:
+          Type: Api
+          Properties:
+            Path: /callback-configuration
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetCallbackConfigurationOptions:
+          Type: Api
+          Properties:
+            Path: /callback-configuration
+            Method: options
+      AutoPublishAlias: live
+    
+  UpdateCallbackConfigurationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: update_callback_configuration/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          PARAMETER_NAME: !Ref CallbackConfigurationParameterName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ssm:PutParameter
+                - ssm:GetParameter
+              Resource: !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${CallbackConfigurationParameterName}'
+      Events:
+        UpdateCallbackConfiguration:
+          Type: Api
+          Properties:
+            Path: /callback-configuration
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+      AutoPublishAlias: live
+    
+  BulkUpdateCallsInSystemByKeysFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: bulk_update_calls_in_system_by_keys/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoDBTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        BulkUpdateCallsInSystemByKeys:
+          Type: Api
+          Properties:
+            Path: /calls-in-system/bulk-update-by-keys
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        BulkUpdateCallsInSystemByKeysOptions:
+          Type: Api
+          Properties:
+            Path: /calls-in-system/bulk-update-by-keys
+            Method: options
+      AutoPublishAlias: live
+    
+  CreateReportByDateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: create_report_by_date/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          REPORTS_TABLE_NAME: !Ref CallbackReportsTableName
+          REPORTS_QUEUE_URL: !Ref CallbackReportJobsQueue
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: !GetAtt CallbackReportsTable.Arn
+            - Effect: Allow
+              Action:
+                - sqs:SendMessage
+              Resource: !GetAtt CallbackReportJobsQueue.Arn
+      Events:
+        CreateReportByDate:
+          Type: Api
+          Properties:
+            Path: /reports/callbacks/by-date
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        CreateReportByDateOptions:
+          Type: Api
+          Properties:
+            Path: /reports/callbacks/by-date
+            Method: options
+      AutoPublishAlias: live
+
+  ProcessReportByDateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: process_report_by_date/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Timeout: 900
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          REPORTS_TABLE_NAME: !Ref CallbackReportsTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+          ATHENA_DATABASE: !Ref AthenaDatabase
+          ATHENA_OUTPUT_BUCKET: !Ref AthenaOutputBucket
+          ATHENA_OUTPUT_PREFIX: !Ref AthenaOutputPrefix
+          ATHENA_TABLE_NAME: !Ref AthenaTableName
+          REPORTS_BUCKET: !Ref CallbackReportsBucket
+          REPORTS_PREFIX: "reports/callbacks-by-date/"
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallbackReportsTableName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref CallbackReportsTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+              Resource:
+                - !Sub "arn:aws:s3:::${CallbackReportsBucket}"
+                - !Sub "arn:aws:s3:::${CallbackReportsBucket}/*"
+            - Effect: Allow
+              Action:
+                - s3:GetBucketLocation
+                - s3:ListBucket
+                - s3:GetObject
+                - s3:PutObject
+              Resource:
+                - !Sub 'arn:aws:s3:::${AthenaOutputBucket}'
+                - !Sub 'arn:aws:s3:::${AthenaOutputBucket}/*'
+            - Effect: Allow
+              Action:
+                - athena:StartQueryExecution
+                - athena:GetQueryExecution
+                - athena:GetQueryResults
+                - athena:StopQueryExecution
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - glue:GetDatabase
+                - glue:GetTable
+                - glue:GetPartitions
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+                - s3:GetBucketLocation
+              Resource:
+                - !Sub 'arn:aws:s3:::bpac-crt-ctr-analytics-crt'
+                - !Sub 'arn:aws:s3:::bpac-crt-ctr-analytics-crt/*'
+                - arn:aws:s3:::bpac-crt-nubity-callback-sample-for-ui-testing
+                - arn:aws:s3:::bpac-crt-nubity-callback-sample-for-ui-testing/*
+                - arn:aws:s3:::bpac-prd-callback-reports-bucket
+                - arn:aws:s3:::bpac-prd-callback-reports-bucket/*
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:GenerateDataKey
+              Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+      Events:
+        ProcessReportByDateQueueEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt CallbackReportJobsQueue.Arn
+            BatchSize: 10
+      AutoPublishAlias: live
+
+  GetReportRowsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_report_rows/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          REPORTS_TABLE_NAME: !Ref CallbackReportsTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallbackReportsTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub "arn:aws:s3:::${CallbackReportsBucket}"
+                - !Sub "arn:aws:s3:::${CallbackReportsBucket}/*"
+      Events:
+        GetReportRows:
+          Type: Api
+          Properties:
+            Path: /reports/{reportId}/rows
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetReportRowsOptions:
+          Type: Api
+          Properties:
+            Path: /reports/{reportId}/rows
+            Method: options
+      AutoPublishAlias: live
+
+  GetReportsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_reports/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          REPORTS_TABLE_NAME: !Ref CallbackReportsTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallbackReportsTableName
+      Events:
+        GetReports:
+          Type: Api
+          Properties:
+            Path: /reports
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetReportsOptions:
+          Type: Api
+          Properties:
+            Path: /reports
+            Method: options
+      AutoPublishAlias: live
+
+  DownloadReportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: download_report/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          REPORTS_TABLE_NAME: !Ref CallbackReportsTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallbackReportsTableName
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource:
+                - !Sub "arn:aws:s3:::${CallbackReportsBucket}"
+                - !Sub "arn:aws:s3:::${CallbackReportsBucket}/*"
+      Events:
+        DownloadReport:
+          Type: Api
+          Properties:
+            Path: /reports/{reportId}/download
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        DownloadReportOptions:
+          Type: Api
+          Properties:
+            Path: /reports/{reportId}/download
+            Method: options
+      AutoPublishAlias: live
+
+  GetBlockedAnisFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_blocked_anis/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          ANI_BLOCKED_TABLE_NAME: !Ref AniBlockedTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref AniBlockedTableName
+      Events:
+        GetBlockedAnis:
+          Type: Api
+          Properties:
+            Path: /blocked-anis
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetBlockedAnisOptions:
+          Type: Api
+          Properties:
+            Path: /blocked-anis
+            Method: options
+      AutoPublishAlias: live
+
+  CreateBlockedAniFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: create_blocked_ani/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          ANI_BLOCKED_TABLE_NAME: !Ref AniBlockedTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AniBlockedTableName
+      Events:
+        CreateBlockedAni:
+          Type: Api
+          Properties:
+            Path: /blocked-anis
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+      AutoPublishAlias: live
+
+  UpdateBlockedAniFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: update_blocked_ani/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          ANI_BLOCKED_TABLE_NAME: !Ref AniBlockedTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AniBlockedTableName
+      Events:
+        UpdateBlockedAni:
+          Type: Api
+          Properties:
+            Path: /blocked-anis/{phone_number}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+        UpdateBlockedAniOptions:
+          Type: Api
+          Properties:
+            Path: /blocked-anis/{phone_number}
+            Method: options
+      AutoPublishAlias: live
+
+  DeleteBlockedAniFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: delete_blocked_ani/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          ANI_BLOCKED_TABLE_NAME: !Ref AniBlockedTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref AniBlockedTableName
+      Events:
+        DeleteBlockedAni:
+          Type: Api
+          Properties:
+            Path: /blocked-anis/{phone_number}
+            Method: delete
+            Auth:
+              Authorizer: CognitoAuthorizer
+      AutoPublishAlias: live
+
+  QueryReportByDate:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: query_report_by_date/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Timeout: 300
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          ATHENA_DATABASE: !Ref AthenaDatabase
+          ATHENA_OUTPUT_BUCKET: !Ref AthenaOutputBucket
+          ATHENA_OUTPUT_PREFIX: !Ref AthenaOutputPrefix
+          ATHENA_TABLE_NAME: !Ref AthenaTableName
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - athena:StartQueryExecution
+                - athena:GetQueryExecution
+                - athena:GetQueryResults
+                - athena:StopQueryExecution
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - s3:GetBucketLocation
+                - s3:ListBucket
+                - s3:GetObject
+                - s3:PutObject
+              Resource:
+                - !Sub 'arn:aws:s3:::${AthenaOutputBucket}'
+                - !Sub 'arn:aws:s3:::${AthenaOutputBucket}/*'
+                - arn:aws:s3:::bpac-crt-athena-query-bucket
+                - arn:aws:s3:::bpac-crt-athena-query-bucket/*
+                - arn:aws:s3:::bpac-prd-callback-reports-bucket
+                - arn:aws:s3:::bpac-prd-callback-reports-bucket/*
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:ListBucket
+                - s3:GetBucketLocation
+              Resource:
+                - !Sub 'arn:aws:s3:::bpac-crt-ctr-analytics-crt'
+                - !Sub 'arn:aws:s3:::bpac-crt-ctr-analytics-crt/*'
+                - arn:aws:s3:::bpac-crt-nubity-callback-sample-for-ui-testing
+                - arn:aws:s3:::bpac-crt-nubity-callback-sample-for-ui-testing/*
+            - Effect: Allow
+              Action:
+                - glue:GetDatabase
+                - glue:GetTable
+                - glue:GetPartitions
+              Resource: "*"
+            - Effect: Allow
+              Action:
+                - kms:Decrypt
+                - kms:GenerateDataKey
+              Resource: !Sub 'arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/*'
+      Events:
+        QueryReportByDate:
+          Type: Api
+          Properties:
+            Path: /report-by-date
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        QueryReportByDateOptions:
+          Type: Api
+          Properties:
+            Path: /report-by-date
+            Method: options
+      AutoPublishAlias: live
+    
+  QueryCallbackHistoryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: query_callback_history/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Timeout: 300
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          DYNAMODB_TABLE_NAME: !Ref DynamoDBTableName
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
+      Events:
+        QueryCallbackHistory:
+          Type: Api
+          Properties:
+            Path: /callback-history/query
+            Method: post
+            Auth:
+              Authorizer: CognitoAuthorizer
+        QueryCallbackHistoryOptions:
+          Type: Api
+          Properties:
+            Path: /callback-history/query
+            Method: options
+      AutoPublishAlias: live
+    
+  GetCallbackConcurrencyMetricsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_callback_concurrency_metrics/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+          AWS_DYNAMODB_ACTIVE_CONTACTS_TABLE_NAME: !Ref ActiveContactsInFlowTableName
+          AWS_DYNAMODB_CALLS_IN_SYSTEM_TABLE_NAME: !Ref DynamoDBTableName
+          AWS_DYNAMODB_QUEUE_CONFIG_TABLE_NAME: !Ref QueueConfigurationTableName
+          AWS_DYNAMODB_QUEUE_OPERATION_HOURS_TABLE_NAME: !Ref QueueOperationHoursTableName
+          LIMIT_ASAP: !Ref CallbackLimitAsap
+          LIMIT_SCHEDULE: !Ref CallbackLimitSchedule
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ActiveContactsInFlowTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref QueueConfigurationTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref QueueOperationHoursTableName
+      Events:
+        GetCallbackConcurrencyMetrics:
+          Type: Api
+          Properties:
+            Path: /callback-concurrency-metrics
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetCallbackConcurrencyMetricsOptions:
+          Type: Api
+          Properties:
+            Path: /callback-concurrency-metrics
+            Method: options
+      AutoPublishAlias: live
+    
+
+  GetCallbackHistoricalSummaryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_callback_historical_summary/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_CALLS_IN_SYSTEM_TABLE_NAME: !Ref DynamoDBTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref DynamoDBTableName
+      Events:
+        GetCallbackHistoricalSummary:
+          Type: Api
+          Properties:
+            Path: /callback-historical-summary
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetCallbackHistoricalSummaryOptions:
+          Type: Api
+          Properties:
+            Path: /callback-historical-summary
+            Method: options
+      AutoPublishAlias: live
+
+  GetUserPermissionsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_user_permissions/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          ACL_TABLE_NAME: !Ref UserAclTableName
+          DYNAMODB_REGION: !Ref DynamoDBRegion
+          DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        GetUserPermissions:
+          Type: Api
+          Properties:
+            Path: /me/permissions
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetUserPermissionsOptions:
+          Type: Api
+          Properties:
+            Path: /me/permissions
+            Method: options
+      AutoPublishAlias: live
+
+  GetQueueGroupInfoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_queue_group_info/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_TABLE_NAME: !Ref QueueGroupInfoTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref QueueGroupInfoTableName
+      Events:
+        GetQueueGroupInfo:
+          Type: Api
+          Properties:
+            Path: /queue-group-info
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetQueueGroupInfoOptions:
+          Type: Api
+          Properties:
+            Path: /queue-group-info
+            Method: options
+      AutoPublishAlias: live
+
+  UpdateQueueGroupInfoFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: update_queue_group_info/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_TABLE_NAME: !Ref QueueGroupInfoTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref QueueGroupInfoTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        UpdateQueueGroupInfo:
+          Type: Api
+          Properties:
+            Path: /queue-group-info/{queue_group_name}
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+        UpdateQueueGroupInfoOptions:
+          Type: Api
+          Properties:
+            Path: /queue-group-info/{queue_group_name}
+            Method: options
+      AutoPublishAlias: live
+
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  GetCallsInSystemApi:
+    Description: "API Gateway endpoint URL for Prod stage for Get Calls In System function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/getCallsInSystem"
+  GetCallsInSystemFunction:
+    Description: "Get Calls In System Lambda Function ARN"
+    Value: !GetAtt GetCallsInSystemFunction.Arn
+  GetCallsInSystemFunctionIamRole:
+    Description: "Implicit IAM Role created for Get Calls In System function"
+    Value: !GetAtt GetCallsInSystemFunctionRole.Arn
+  
+  UpdateCallsInSystemApi:
+    Description: "API Gateway endpoint URL for Prod stage for Update Calls In System function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/calls-in-system/{contact_id_inbound}"
+  UpdateCallsInSystemFunction:
+    Description: "Update Calls In System Lambda Function ARN"
+    Value: !GetAtt UpdateCallsInSystemFunction.Arn
+  UpdateCallsInSystemFunctionIamRole:
+    Description: "Implicit IAM Role created for Update Calls In System function"
+    Value: !GetAtt UpdateCallsInSystemFunctionRole.Arn
+  
+  GetHolidayCalendarApi:
+    Description: "API Gateway endpoint URL for Prod stage for Get Holiday Calendar function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/getHolidayCalendar"
+  GetHolidayCalendarFunction:
+    Description: "Get Holiday Calendar Lambda Function ARN"
+    Value: !GetAtt GetHolidayCalendarFunction.Arn
+  GetHolidayCalendarFunctionIamRole:
+    Description: "Implicit IAM Role created for Get Holiday Calendar function"
+    Value: !GetAtt GetHolidayCalendarFunctionRole.Arn
+  
+  CreateHolidayCalendarApi:
+    Description: "API Gateway endpoint URL for Prod stage for Create Holiday Calendar function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/holiday-calendars"
+  CreateHolidayCalendarFunction:
+    Description: "Create Holiday Calendar Lambda Function ARN"
+    Value: !GetAtt CreateHolidayCalendarFunction.Arn
+  CreateHolidayCalendarFunctionIamRole:
+    Description: "Implicit IAM Role created for Create Holiday Calendar function"
+    Value: !GetAtt CreateHolidayCalendarFunctionRole.Arn
+  
+  UpdateHolidayCalendarApi:
+    Description: "API Gateway endpoint URL for Prod stage for Update Holiday Calendar function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/holiday-calendars/{date}"
+  UpdateHolidayCalendarFunction:
+    Description: "Update Holiday Calendar Lambda Function ARN"
+    Value: !GetAtt UpdateHolidayCalendarFunction.Arn
+  UpdateHolidayCalendarFunctionIamRole:
+    Description: "Implicit IAM Role created for Update Holiday Calendar function"
+    Value: !GetAtt UpdateHolidayCalendarFunctionRole.Arn
+  
+  GetQueueConfigurationApi:
+    Description: "API Gateway endpoint URL for Prod stage for Get Queue Configuration function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/queue-configurations"
+  GetQueueConfigurationFunction:
+    Description: "Get Queue Configuration Lambda Function ARN"
+    Value: !GetAtt GetQueueConfigurationFunction.Arn
+  GetQueueConfigurationFunctionIamRole:
+    Description: "Implicit IAM Role created for Get Queue Configuration function"
+    Value: !GetAtt GetQueueConfigurationFunctionRole.Arn
+  
+  UpdateQueueConfigurationApi:
+    Description: "API Gateway endpoint URL for Prod stage for Update Queue Configuration function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/queue-configurations/{queue_name}"
+  UpdateQueueConfigurationFunction:
+    Description: "Update Queue Configuration Lambda Function ARN"
+    Value: !GetAtt UpdateQueueConfigurationFunction.Arn
+  UpdateQueueConfigurationFunctionIamRole:
+    Description: "Implicit IAM Role created for Update Queue Configuration function"
+    Value: !GetAtt UpdateQueueConfigurationFunctionRole.Arn
+  
+  GetCallbackConfigurationApi:
+    Description: "API Gateway endpoint URL for Prod stage for Get Callback Configuration function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/callback-configuration"
+  GetCallbackConfigurationFunction:
+    Description: "Get Callback Configuration Lambda Function ARN"
+    Value: !GetAtt GetCallbackConfigurationFunction.Arn
+  GetCallbackConfigurationFunctionIamRole:
+    Description: "Implicit IAM Role created for Get Callback Configuration function"
+    Value: !GetAtt GetCallbackConfigurationFunctionRole.Arn
+  
+  UpdateCallbackConfigurationApi:
+    Description: "API Gateway endpoint URL for Prod stage for Update Callback Configuration function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/callback-configuration"
+  UpdateCallbackConfigurationFunction:
+    Description: "Update Callback Configuration Lambda Function ARN"
+    Value: !GetAtt UpdateCallbackConfigurationFunction.Arn
+  UpdateCallbackConfigurationFunctionIamRole:
+    Description: "Implicit IAM Role created for Update Callback Configuration function"
+    Value: !GetAtt UpdateCallbackConfigurationFunctionRole.Arn
+  BulkUpdateCallsInSystemApi:
+    Description: "API Gateway endpoint URL for Prod stage for Bulk Update Calls In System function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/calls-in-system/bulk-update"
+  BulkUpdateCallsInSystemByKeysApi:
+    Description: "API Gateway endpoint URL for Prod stage for Bulk Update Calls In System By Keys function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/calls-in-system/bulk-update-by-keys"
+  BulkUpdateCallsInSystemByKeysFunction:
+    Description: "Bulk Update Calls In System By Keys Lambda Function ARN"
+    Value: !GetAtt BulkUpdateCallsInSystemByKeysFunction.Arn
+  BulkUpdateCallsInSystemByKeysFunctionIamRole:
+    Description: "Implicit IAM Role created for Bulk Update Calls In System By Keys function"
+    Value: !GetAtt BulkUpdateCallsInSystemByKeysFunctionRole.Arn
+
+  DeleteHolidayCalendarApi:
+    Description: "API Gateway endpoint URL for Prod stage for Delete Holiday Calendar function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/holiday-calendars/{date}"
+  DeleteHolidayCalendarFunction:
+    Description: "Delete Holiday Calendar Lambda Function ARN"
+    Value: !GetAtt DeleteHolidayCalendarFunction.Arn
+  DeleteHolidayCalendarFunctionIamRole:
+    Description: "Implicit IAM Role created for Delete Holiday Calendar function"
+    Value: !GetAtt DeleteHolidayCalendarFunctionRole.Arn
+  
+  QueryReportByDateApi:
+    Description: "API Gateway endpoint URL for Prod stage for Query Connect Contacts function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/report-by-date"
+  QueryReportByDateFunction:
+    Description: "Query Report By Date Lambda Function ARN"
+    Value: !GetAtt QueryReportByDate.Arn
+  QueryReportByDateFunctionIamRole:
+    Description: "Implicit IAM Role created for Query Report By Date function"
+    Value: !GetAtt QueryReportByDateRole.Arn
+  
+  QueryCallbackHistoryApi:
+    Description: "API Gateway endpoint URL for Prod stage for Query Callback History function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/callback-history/query"
+  QueryCallbackHistoryFunction:
+    Description: "Query Callback History Lambda Function ARN"
+    Value: !GetAtt QueryCallbackHistoryFunction.Arn
+  QueryCallbackHistoryFunctionIamRole:
+    Description: "Implicit IAM Role created for Query Callback History function"
+    Value: !GetAtt QueryCallbackHistoryFunctionRole.Arn
+  
+  GetCallbackConcurrencyMetricsApi:
+    Description: "API Gateway endpoint URL for Prod stage for Get Callback Concurrency Metrics function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/callback-concurrency-metrics"
+  GetCallbackConcurrencyMetricsFunction:
+    Description: "Get Callback Concurrency Metrics Lambda Function ARN"
+    Value: !GetAtt GetCallbackConcurrencyMetricsFunction.Arn
+  GetCallbackConcurrencyMetricsFunctionIamRole:
+    Description: "Implicit IAM Role created for Get Callback Concurrency Metrics function"
+    Value: !GetAtt GetCallbackConcurrencyMetricsFunctionRole.Arn
+  
+  GetUserPermissionsApi:
+    Description: "API Gateway endpoint URL for Prod stage for Get User Permissions function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/me/permissions"
+  GetUserPermissionsFunction:
+    Description: "Get User Permissions Lambda Function ARN"
+    Value: !GetAtt GetUserPermissionsFunction.Arn
+  GetUserPermissionsFunctionIamRole:
+    Description: "Implicit IAM Role created for Get User Permissions function"
+    Value: !GetAtt GetUserPermissionsFunctionRole.Arn
+

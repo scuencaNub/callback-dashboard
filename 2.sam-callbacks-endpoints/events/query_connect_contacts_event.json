@@ -1,0 +1,9 @@
+{
+    "httpMethod": "POST",
+    "path": "/connect-contacts/report-by-date",
+    "headers": {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer token"
+    },
+    "body": "{\"phone_numbers\": [\"17871234597\", \"17877880404\"], \"start_date\": \"2026-01-06 00:00:00\", \"end_date\": \"2026-01-06 23:59:59\"}"
+}

@@ -1,0 +1,70 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Configuración básica de Cognito User Pool
+
+Resources:
+  # User Pool - donde se almacenan los usuarios
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: callback-user-pool-4
+      # Los usuarios pueden iniciar sesión con email
+      UsernameAttributes:
+        - email
+      # AWS verificará automáticamente el email
+      AutoVerifiedAttributes:
+        - email
+
+  # User Pool Client - tu aplicación web usará esto para conectarse
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: callback-web-app-4
+      # No necesitamos secreto para aplicaciones web públicas
+      GenerateSecret: false
+      AllowedOAuthFlows: ["code"]
+      AllowedOAuthScopes: ["openid"]
+      CallbackURLs: ["http://localhost:3000/auth/callback"]
+      SupportedIdentityProviders: 
+        - "COGNITO"
+        - !Ref AzureADIdentityProvider
+      AllowedOAuthFlowsUserPoolClient: true
+      LogoutURLs: ["http://localhost:3000/"]
+      # Permitir autenticación con usuario/contraseña y refresh tokens
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: callback-user-pool-4
+  AzureADIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Azure
+      ProviderType: SAML
+      ProviderDetails:
+        MetadataURL: "https://login.microsoftonline.com/2b5b7d77-f19b-4c6d-b180-5768c09ad43b/federationmetadata/2007-06/federationmetadata.xml?appid=6be50966-5dd7-49d8-947a-a6c64cd13e22"
+      AttributeMapping:
+        email: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress"
+        name: "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name"
+
+
+Outputs:
+  # Estos valores los necesitarás en tu aplicación
+  UserPoolId:
+    Description: "Pool User ID"
+    Value: !Ref UserPool
+  
+  UserPoolClientId:
+    Description: "Client ID"
+    Value: !Ref UserPoolClient
+  UserPoolDomain:
+    Description: "User Pool Domain"
+    Value: !Ref UserPoolDomain
+  HostedUIURL:
+    Description: "Hosted UI URL"
+    Value: !Sub "https://${UserPoolDomain}.auth.${AWS::Region}.amazoncognito.com"

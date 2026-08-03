@@ -1,0 +1,24 @@
+{
+    "httpMethod": "POST",
+    "path": "/blocked-anis",
+    "headers": {
+        "Content-Type": "application/json"
+    },
+    "body": "{\"phone_number\": \"+17879999999\", \"blocked_until\": \"2027-06-15T00:00:00Z\"}",
+    "isBase64Encoded": false,
+    "requestContext": {
+        "accountId": "123456789012",
+        "apiId": "test-api-id",
+        "stage": "Prod",
+        "requestId": "test-request-id",
+        "identity": {
+            "sourceIp": "127.0.0.1"
+        },
+        "authorizer": {
+            "claims": {
+                "email": "misael.valles@nubity.com",
+                "cognito:username": "misael.valles@nubity.com"
+            }
+        }
+    }
+}

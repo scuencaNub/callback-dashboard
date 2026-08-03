@@ -1,0 +1,33 @@
+En la implementación actual del reporte por fecha (`QueryReportByDate`) estamos ejecutando la consulta de Athena de forma completamente síncrona detrás de API Gateway: la Lambda lanza `StartQueryExecution`, se queda esperando el resultado (hasta 5 minutos) y recién ahí devuelve todos los registros al cliente. Esto choca de frente con el timeout duro de API Gateway (~30 segundos); cuando la consulta tarda más que eso (escenario muy probable con rangos de fechas grandes y volúmenes altos de datos), el usuario ve un timeout aunque la Lambda siga corriendo por detrás. Además, el usuario tiene que quedarse “mirando un spinner” todo ese tiempo y no hay forma de recuperar el resultado más tarde ni de tener historial de reportes.
+
+Por estos motivos se decidió cambiar la arquitectura a un modelo asíncrono de generación de reportes, resumido así:
+
+- Tratar el reporte como un **job** en lugar de una request síncrona.
+- Definir una tabla DynamoDB de jobs de reporte (`CallbackReports`) con al menos:
+  - `reportId` (PK, UUID),
+  - `type` (por ahora `"CALLBACKS_BY_DATE"`),
+  - `params` (rango de fechas, phone_numbers, etc.),
+  - `status` (`PENDING|RUNNING|SUCCEEDED|FAILED`),
+  - `createdAt`, `createdBy`,
+  - `finishedAt`, `resultLocation` (ruta en S3) y `error` opcionales.
+- Exponer un **Endpoint 1** `POST /reports/callbacks/by-date` que:
+  - Valida parámetros,
+  - Genera `reportId`,
+  - Inserta el job en DynamoDB con `status=PENDING`,
+  - Publica un mensaje a una cola SQS de trabajos de reporte,
+  - Responde rápido con `{ reportId, status: "PENDING" }`.
+- Implementar un **worker asíncrono** (Lambda disparada por SQS) que:
+  - Lee el `reportId`, marca el job como `RUNNING`,
+  - Ejecuta la misma lógica de Athena que hoy (`StartQueryExecution`, espera a `SUCCEEDED`, lee resultados paginados),
+  - Genera un CSV (o formato similar) y lo guarda en S3 (`s3://.../reports/<reportId>.csv`),
+  - Actualiza el job en DynamoDB a `SUCCEEDED` o `FAILED` con `finishedAt`, `resultLocation` y/o `error`.
+- Exponer un **Endpoint 2** `GET /reports/{reportId}` para que el frontend consulte el estado del job y, cuando `status=SUCCEEDED`, pueda mostrar el enlace de descarga o generar un pre-signed URL.
+- A nivel UX, el frontend deja de esperar el resultado en una sola llamada:
+  - Hace el `POST`, obtiene el `reportId` y muestra un mensaje tipo “Tu reporte está siendo generado”.
+  - Puede hacer polling suave con `GET /reports/{reportId}` o mostrar un historial de “mis reportes” filtrando por `createdBy`.
+
+Con este cambio:
+
+- Eliminamos el riesgo de timeouts de API Gateway para consultas pesadas.
+- Permitimos que el usuario recupere reportes más tarde y tengamos historial.
+- Desacoplamos la generación del reporte (pesada, con Athena) de la interacción HTTP, sin cambiar los datos de negocio ni la lógica de filtrado que hoy ya existe en `QueryReportByDate` (esa lógica se mueve al worker).

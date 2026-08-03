@@ -1,0 +1,191 @@
+CloudFormation outputs from deployed stack
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Outputs
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Key                 UpdateHolidayCalendarFunctionIamRole
+Description         Implicit IAM Role created for Update Holiday Calendar function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-UpdateHolidayCalendarFuncti-QCRMYWc2whtn
+
+Key                 QueryReportByDateFunction
+Description         Query Report By Date Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-QueryReportByDate-dFsV5CRaj4ux
+
+Key                 QueryReportByDateFunctionIamRole
+Description         Implicit IAM Role created for Query Report By Date function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-QueryReportByDateRole-1rs3BqSY4tDN
+
+Key                 BulkUpdateCallsInSystemApi
+Description         API Gateway endpoint URL for Prod stage for Bulk Update Calls In System function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/calls-in-system/bulk-update
+
+Key                 GetCallsInSystemFunctionIamRole
+Description         Implicit IAM Role created for Get Calls In System function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-GetCallsInSystemFunctionRol-4ikUV87Z9lI5
+
+Key                 GetCallsInSystemApi
+Description         API Gateway endpoint URL for Prod stage for Get Calls In System function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/getCallsInSystem
+
+Key                 UpdateQueueConfigurationFunctionIamRole
+Description         Implicit IAM Role created for Update Queue Configuration function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-UpdateQueueConfigurationFun-VrPI5hSJD504
+
+Key                 UpdateCallsInSystemFunction
+Description         Update Calls In System Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-UpdateCallsInSystemFunctio-E1ohJPpA8bhW
+
+Key                 DeleteHolidayCalendarFunctionIamRole
+Description         Implicit IAM Role created for Delete Holiday Calendar function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-DeleteHolidayCalendarFuncti-9HwGckHJ5OoL
+
+Key                 QueryCallbackHistoryApi
+Description         API Gateway endpoint URL for Prod stage for Query Callback History function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/callback-history/query
+
+Key                 UpdateCallsInSystemApi
+Description         API Gateway endpoint URL for Prod stage for Update Calls In System function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/calls-in-system/{contact_id_inbound}
+
+Key                 BulkUpdateCallsInSystemByKeysFunction
+Description         Bulk Update Calls In System By Keys Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-BulkUpdateCallsInSystemByK-oQaJRTppIgUP
+
+Key                 QueryCallbackHistoryFunction
+Description         Query Callback History Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-QueryCallbackHistoryFuncti-wRSpKa2tDpMx
+
+Key                 CreateHolidayCalendarFunction
+Description         Create Holiday Calendar Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-CreateHolidayCalendarFunct-9tMIbJhAQ1O2
+
+Key                 UpdateQueueConfigurationFunction
+Description         Update Queue Configuration Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-UpdateQueueConfigurationFu-3PdgBcNl6bbD
+
+Key                 GetCallsInSystemFunction
+Description         Get Calls In System Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-GetCallsInSystemFunction-ydhynj4z1G44
+
+Key                 QueryReportByDateApi
+Description         API Gateway endpoint URL for Prod stage for Query Connect Contacts function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/report-by-date
+
+Key                 UpdateCallsInSystemFunctionIamRole
+Description         Implicit IAM Role created for Update Calls In System function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-UpdateCallsInSystemFunction-h2cqdJ3CrzEF
+
+Key                 GetQueueConfigurationFunctionIamRole
+Description         Implicit IAM Role created for Get Queue Configuration function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-GetQueueConfigurationFuncti-b0vhWeiEQS0e
+
+Key                 CreateHolidayCalendarFunctionIamRole
+Description         Implicit IAM Role created for Create Holiday Calendar function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-CreateHolidayCalendarFuncti-YOYV2oj0krlT
+
+Key                 UpdateQueueConfigurationApi
+Description         API Gateway endpoint URL for Prod stage for Update Queue Configuration function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/queue-configurations/{queue_name}
+
+Key                 GetUserPermissionsFunction
+Description         Get User Permissions Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-GetUserPermissionsFunction-vn0fFcmZ4KXP
+
+Key                 GetCallbackConcurrencyMetricsFunction
+Description         Get Callback Concurrency Metrics Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-GetCallbackConcurrencyMetr-TjzfhvqRsLKC
+
+Key                 GetUserPermissionsApi
+Description         API Gateway endpoint URL for Prod stage for Get User Permissions function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/me/permissions
+
+Key                 UpdateHolidayCalendarApi
+Description         API Gateway endpoint URL for Prod stage for Update Holiday Calendar function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/holiday-calendars/{date}
+
+Key                 GetUserPermissionsFunctionIamRole
+Description         Implicit IAM Role created for Get User Permissions function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-GetUserPermissionsFunctionR-udlFzrovRykc
+
+Key                 GetQueueConfigurationApi
+Description         API Gateway endpoint URL for Prod stage for Get Queue Configuration function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/queue-configurations
+
+Key                 UpdateCallbackConfigurationFunctionIamRole
+Description         Implicit IAM Role created for Update Callback Configuration function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-UpdateCallbackConfiguration-LPrBrNpSOreR
+
+Key                 GetCallbackConcurrencyMetricsFunctionIamRole
+Description         Implicit IAM Role created for Get Callback Concurrency Metrics function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-GetCallbackConcurrencyMetri-Jc3pMVefFgJW
+
+Key                 GetHolidayCalendarFunctionIamRole
+Description         Implicit IAM Role created for Get Holiday Calendar function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-GetHolidayCalendarFunctionR-bRkdhZVKYCfC
+
+Key                 GetHolidayCalendarApi
+Description         API Gateway endpoint URL for Prod stage for Get Holiday Calendar function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/getHolidayCalendar
+
+Key                 DeleteHolidayCalendarApi
+Description         API Gateway endpoint URL for Prod stage for Delete Holiday Calendar function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/holiday-calendars/{date}
+
+Key                 GetCallbackConfigurationFunctionIamRole
+Description         Implicit IAM Role created for Get Callback Configuration function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-GetCallbackConfigurationFun-dGgZ9vbjor3m
+
+Key                 GetHolidayCalendarFunction
+Description         Get Holiday Calendar Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-GetHolidayCalendarFunction-UIIWumbKYCkr
+
+Key                 UpdateHolidayCalendarFunction
+Description         Update Holiday Calendar Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-UpdateHolidayCalendarFunct-4MC4qrt82k7B
+
+Key                 UpdateCallbackConfigurationApi
+Description         API Gateway endpoint URL for Prod stage for Update Callback Configuration function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/callback-configuration
+
+Key                 DeleteHolidayCalendarFunction
+Description         Delete Holiday Calendar Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-DeleteHolidayCalendarFunct-QHD3002360lz
+
+Key                 QueryCallbackHistoryFunctionIamRole
+Description         Implicit IAM Role created for Query Callback History function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-QueryCallbackHistoryFunctio-7IfMbqL3UN5o
+
+Key                 BulkUpdateCallsInSystemByKeysFunctionIamRole
+Description         Implicit IAM Role created for Bulk Update Calls In System By Keys function
+Value               arn:aws:iam::269763020244:role/BPAC-PRD-callbacks-beta-BulkUpdateCallsInSystemByKe-Bepqj0a2Er4j
+
+Key                 GetCallbackConfigurationApi
+Description         API Gateway endpoint URL for Prod stage for Get Callback Configuration function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/callback-configuration
+
+Key                 GetQueueConfigurationFunction
+Description         Get Queue Configuration Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-GetQueueConfigurationFunct-CdoqTh9NzpMg
+
+Key                 GetCallbackConfigurationFunction
+Description         Get Callback Configuration Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-GetCallbackConfigurationFu-LYKBrPREuTp4
+
+Key                 UpdateCallbackConfigurationFunction
+Description         Update Callback Configuration Lambda Function ARN
+Value               arn:aws:lambda:us-east-1:269763020244:function:BPAC-PRD-callbacks-beta-UpdateCallbackConfiguratio-Vk0oe9DxtRA3
+
+Key                 BulkUpdateCallsInSystemByKeysApi
+Description         API Gateway endpoint URL for Prod stage for Bulk Update Calls In System By Keys function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/calls-in-system/bulk-update-by-keys
+
+Key                 CreateHolidayCalendarApi
+Description         API Gateway endpoint URL for Prod stage for Create Holiday Calendar function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/holiday-calendars
+
+Key                 GetCallbackConcurrencyMetricsApi
+Description         API Gateway endpoint URL for Prod stage for Get Callback Concurrency Metrics function
+Value               https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/callback-concurrency-metrics
+-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+Successfully created/updated stack - BPAC-PRD-callbacks-beta in us-east-1

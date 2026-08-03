@@ -1,0 +1,1 @@
+cd /Users/gcaserotto/apps/nubity/deploy-callback-app-edit/2.sam-callbacks-endpoints && sam local invoke BulkUpdateCallsInSystemFunction --event events/bulk_update_calls_in_system_event.json --profile BPAC-PRD-833469488738-DV --parameter-overrides DynamoDBTableName=BPAC-CRT-bppr-amazon-connect-extensions-TableCallsInSystem-VBHP7ZSGIYO8 DynamoDBRegion=us-east-1

@@ -1,0 +1,28 @@
+# Floci - Local AWS Emulator for backend-callback
+# Docs: https://floci.io
+#
+# Uso:
+#   docker compose up -d
+#   sam local start-api --env-vars env.local.json
+#
+# Servicios emulados: DynamoDB, S3, SQS, SSM, Cognito, API Gateway, KMS
+# NO emulados: Athena, Glue (los endpoints de reportes no funcionarán localmente)
+
+services:
+  floci:
+    image: floci/floci:latest
+    container_name: floci-backend-callback
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock   # Necesario para Lambda execution
+      - ./floci-data:/app/data                       # Persistencia local
+    environment:
+      - FLOCI_DEFAULT_REGION=us-east-1
+      - FLOCI_DEBUG=true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_floci/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

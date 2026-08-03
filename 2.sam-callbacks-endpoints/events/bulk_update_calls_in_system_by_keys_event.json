@@ -1,0 +1,18 @@
+{
+  "httpMethod": "POST",
+  "path": "/calls-in-system/bulk-update-by-keys",
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": "{\n  \"items\": [\n    { \"contact_id_inbound\": \"d7dc34be-abee-4f97-bb12-9e2a628e8087\", \"call_at\": \"2025-12-15 11:56\" },\n    { \"contact_id_inbound\": \"35d28522-b06a-4409-a25a-910866988e91\", \"call_at\": \"2025-12-15 12:00\" }\n  ],\n  \"update_fields\": {\n    \"call_at\": \"2025-12-15 12:10\"\n  },\n  \"max_concurrency\": 20\n}",
+  "isBase64Encoded": false,
+  "requestContext": {
+    "accountId": "123456789012",
+    "apiId": "test-api-id",
+    "stage": "Prod",
+    "requestId": "test-request-id",
+    "identity": {
+      "sourceIp": "127.0.0.1"
+    }
+  }
+}

@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'CloudFront Implementation for Callback App
+
+  '
+Parameters:
+  BucketName:
+    Type: String
+    Default: bpac-crt-callback-cloudfront-bucket
+Resources:
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName:
+        Ref: BucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+      - Key: Description
+        Value: Private bucket for frontend
+  CloudFrontOriginIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: CloudFront origin access identity for frontend bucket
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket:
+        Ref: FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+              Fn::Sub: arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity
+                ${CloudFrontOriginIdentity}
+          Action: s3:GetObject
+          Resource:
+            Fn::Sub: ${FrontendBucket.Arn}/*
+  PublicDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+        - DomainName:
+            Fn::GetAtt:
+            - FrontendBucket
+            - RegionalDomainName
+          Id: S3-private-bucket
+          S3OriginConfig:
+            OriginAccessIdentity:
+              Fn::Sub: origin-access-identity/cloudfront/${CloudFrontOriginIdentity}
+        Enabled: 'true'
+        Comment: CloudFront distribution for private S3 bucket
+        DefaultRootObject: index.html
+        DefaultCacheBehavior:
+          AllowedMethods:
+          - GET
+          - HEAD
+          TargetOriginId: S3-private-bucket
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+          ViewerProtocolPolicy: redirect-to-https
+        CustomErrorResponses:
+        - ErrorCode: 403
+          ResponseCode: 200
+          ResponsePagePath: /index.html
+          ErrorCachingMinTTL: 0
+        - ErrorCode: 404
+          ResponseCode: 200
+          ResponsePagePath: /index.html
+          ErrorCachingMinTTL: 0
+Outputs:
+  FrontendBucket:
+    Value:
+      Ref: FrontendBucket
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-bucket-name
+  CloudFrontDistribution:
+    Value:
+      Ref: PublicDistribution
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-cloudfront-distribution
+  CloudFrontURL:
+    Value:
+      Fn::Sub: https://${PublicDistribution.DomainName}
+    Description: CloudFront Distribution URL

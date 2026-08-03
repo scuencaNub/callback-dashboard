@@ -1,0 +1,164 @@
+Propuesta para mejorar el search-by-date (reporte por fecha) evitando timeouts de API Gateway y mejorando la UX
+===============================================================================================================
+
+Problema actual
+---------------
+
+- El endpoint `QueryReportByDate` ejecuta una consulta Athena sincrónica:
+  - Lanza `StartQueryExecution`.
+  - Espera en un bucle hasta 5 minutos (`max_wait_time = 300`).
+  - Luego lee todos los resultados con `get_query_results` (con paginación interna).
+- Detrás de API Gateway, las requests tienen un timeout duro (≈30 segundos).
+- Si la consulta Athena tarda más que eso (fácil con rangos de fechas grandes), el usuario ve un timeout aunque la Lambda siga corriendo.
+- El usuario se ve obligado a “esperar mirando un spinner” todo el tiempo de la consulta.
+
+Objetivos
+---------
+
+1. Evitar timeouts de API Gateway, aunque la consulta Athena tarde varios minutos.
+2. No obligar al usuario a quedarse en la pantalla esperando.
+3. Permitir que el usuario recupere el resultado más tarde (historial de reportes).
+4. Mantener una API clara y compatible con el frontend actual, o al menos fácil de adaptar.
+
+Arquitectura propuesta: generación de reportes asíncronos
+---------------------------------------------------------
+
+Idea principal: tratar el reporte por fecha como un "job" de generación de reporte, no como una request síncrona.
+
+Componentes:
+
+1) Tabla DynamoDB de jobs de reporte (por ejemplo `CallbackReports`)
+
+- Clave primaria: `reportId` (partition key, string, UUID).
+- Atributos sugeridos:
+  - `reportId` (string, PK).
+  - `type` (string) – por ejemplo `"CALLBACKS_BY_DATE"`.
+  - `params` (map) – JSON con parámetros: `start_date`, `end_date`, `phone_numbers`, filtros, etc.
+  - `status` (string) – `"PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED"`.
+  - `createdAt` (string, ISO timestamp).
+  - `createdBy` (string, email o `cognito:username`).
+  - `finishedAt` (string, ISO timestamp, opcional).
+  - `resultLocation` (string, opcional) – por ejemplo `s3://.../reports/<reportId>.csv`.
+  - `error` (string, opcional) – mensaje de error si falló.
+
+2) Endpoint 1: crear reporte (start)
+
+- Ruta sugerida: `POST /reports/callbacks/by-date` o similar.
+- Flujo:
+  - Recibe en el body los mismos parámetros que hoy recibe `/report-by-date` (rango de fechas, phone_numbers, etc.).
+  - Valida parámetros y rangos.
+  - Genera un `reportId` (UUID).
+  - Inserta en la tabla DynamoDB un item con:
+    - `reportId`
+    - `type = "CALLBACKS_BY_DATE"`
+    - `params = { ... }`
+    - `status = "PENDING"`
+    - `createdAt`, `createdBy`.
+  - Publica un mensaje a un trigger asíncrono (opciones):
+    - SQS (cola de trabajos de reportes).
+    - EventBridge (event bus) con event type `ReportRequested`.
+  - Devuelve respuesta rápida (HTTP 202 o 200):
+
+    {
+      "reportId": "<uuid>",
+      "status": "PENDING"
+    }
+
+- La request es corta (<1–2 s), no se acerca al timeout de API Gateway.
+
+3) Worker asíncrono: generación del reporte
+
+- Implementado como Lambda separada, no detrás de API Gateway:
+  - Trigger: SQS o EventBridge (mensajes generados en el paso anterior).
+  - Lógica:
+    1. Leer el `reportId` y recuperar el job en DynamoDB.
+    2. Marcar `status = "RUNNING"` y actualizar `startedAt`.
+    3. Ejecutar **la misma lógica de Athena** que hoy está en `QueryReportByDate`:
+       - `StartQueryExecution` con `ATHENA_DATABASE`, `ATHENA_TABLE_NAME`, filtros de fecha y teléfono.
+       - Esperar a que la query termine (`SUCCEEDED` / `FAILED`) sin límite de API Gateway (solo límite de la Lambda).
+       - Leer los resultados paginados con `get_query_results`.
+       - Generar un CSV (o JSON) y guardarlo en S3 (por ejemplo `s3://<bucket>/reports/<reportId>.csv`).
+    4. Si todo OK:
+       - Actualizar DynamoDB:
+         - `status = "SUCCEEDED"`
+         - `finishedAt = <timestamp>`
+         - `resultLocation = "s3://.../<reportId>.csv"`
+       - (Opcional) enviar notificación (SNS / email) al usuario.
+    5. Si hay error:
+       - Actualizar `status = "FAILED"`, `error = <mensaje>`.
+
+4) Endpoint 2: consultar estado de reporte
+
+- Ruta sugerida: `GET /reports/{reportId}`.
+- Flujo:
+  - Lee el item de DynamoDB por `reportId`.
+  - Devuelve:
+
+    {
+      "reportId": "...",
+      "status": "PENDING|RUNNING|SUCCEEDED|FAILED",
+      "createdAt": "...",
+      "finishedAt": "...",
+      "resultLocation": "s3://.../reports/<reportId>.csv",
+      "error": null | "mensaje"
+    }
+
+- Opcional:
+  - Si se quiere evitar exponer la ruta S3 cruda, se puede:
+    - Generar un pre-signed URL en este mismo endpoint cuando `status = "SUCCEEDED"`.
+    - O tener un endpoint `GET /reports/{reportId}/download` que streamee el archivo.
+
+5) Frontend: UX propuesta
+
+- Cuando el usuario completa el formulario de búsqueda:
+  - Hace `POST /reports/callbacks/by-date`.
+  - Recibe `reportId` y `status = PENDING`.
+  - Muestra un mensaje tipo “Tu reporte está siendo generado. ID: <reportId>”.
+- Opciones de UX:
+  - Polling suave:
+    - El front hace `GET /reports/{reportId}` cada 10–20 segundos por 2–3 minutos.
+    - Cuando `status = SUCCEEDED`, muestra un botón “Descargar” (usando `resultLocation` o un endpoint de descarga).
+  - Historial de reportes:
+    - Página “Mis reportes” que lista los últimos N jobs del usuario (filtrando `createdBy` en DynamoDB).
+    - Cada fila muestra: rango de fechas, estado, fecha de creación, enlace de descarga si existe.
+    - El usuario puede salir y volver más tarde; el reporte sigue disponible.
+
+Relación con el handler actual `QueryReportByDate`
+--------------------------------------------------
+
+Actualmente, el handler:
+
+- Valida input (fechas, phone_numbers).
+- Construye y ejecuta la query Athena.
+- Espera a que termine.
+- Lee todos los resultados y los devuelve al cliente en una sola respuesta.
+
+Con la arquitectura nueva:
+
+- El código de validación y construcción de query se reaprovecha en el worker.
+- El endpoint REST detrás de API Gateway **solo crea jobs** (y, si se quiere, expone estado y descarga).
+- Todo lo costoso (Athena + lectura de resultados) se ejecuta en una Lambda “offline” sin límite de 30s de Gateway.
+
+Ventajas
+--------
+
+- **Sin timeouts de API Gateway**: ninguna request individual espera más de unos segundos.
+- **Mejor UX**: el usuario no tiene que quedarse en la pantalla; puede volver luego y descargar el reporte.
+- **Historial**: se puede mostrar fácilmente “últimos reportes” por usuario.
+- **Escalabilidad**: el worker puede procesar varios reportes en paralelo o en cola (SQS) según necesidad.
+- **Reutilización**: el resultado en S3 se puede consumir también desde otros sistemas/reportes sin volver a ejecutar Athena.
+
+Pasos sugeridos para implementación
+-----------------------------------
+
+1. Definir la tabla DynamoDB `CallbackReports` (al menos para CRT primero).
+2. Crear una nueva Lambda worker (por ejemplo `generate_report_by_date/handler.py`) con la lógica actual de Athena adaptada a modo job.
+3. Crear el endpoint `POST /reports/callbacks/by-date` que:
+   - Valida parámetros.
+   - Escribe el job en DynamoDB.
+   - Envía mensaje a SQS o EventBridge.
+4. Configurar la Lambda worker para ser invocada por SQS/EventBridge.
+5. Crear el endpoint `GET /reports/{reportId}` que devuelve estado y `resultLocation` (y opcionalmente un pre-signed URL).
+6. Adaptar el frontend:
+   - Nuevo flujo de generación de reporte asíncrono.
+   - Página de historial de reportes (opcional).

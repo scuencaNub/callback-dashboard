@@ -1,0 +1,21 @@
+{
+    "httpMethod": "PUT",
+    "path": "/holiday-calendars/2025-11-07",
+    "pathParameters": {
+        "date": "2025-11-07"
+    },
+    "headers": {
+        "Content-Type": "application/json"
+    },
+    "body": "{\"name\": \"Updated Holiday Name\", \"description\": \"Updated description\"}",
+    "isBase64Encoded": false,
+    "requestContext": {
+        "accountId": "123456789012",
+        "apiId": "test-api-id",
+        "stage": "Prod",
+        "requestId": "test-request-id",
+        "identity": {
+            "sourceIp": "127.0.0.1"
+        }
+    }
+}

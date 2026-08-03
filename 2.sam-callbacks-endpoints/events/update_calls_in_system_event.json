@@ -1,0 +1,21 @@
+{
+    "httpMethod": "PUT",
+    "path": "/calls-in-system/6015aa3a-2376-4b59-b697-3fb3372f40b8",
+    "pathParameters": {
+        "contact_id_inbound": "6015aa3a-2376-4b59-b697-3fb3372f40b8"
+    },
+    "headers": {
+        "Content-Type": "application/json"
+    },
+    "body": "{\"current_call_at\": \"2025-10-17 15:30:00\", \"queue_id\": \"queue-123\", \"queue_name\": \"VHCallback Sale\", \"call_at\": \"2025-12-10 9:40:00\"}",
+    "isBase64Encoded": false,
+    "requestContext": {
+        "accountId": "123456789012",
+        "apiId": "test-api-id",
+        "stage": "Prod",
+        "requestId": "test-request-id",
+        "identity": {
+            "sourceIp": "127.0.0.1"
+        }
+    }
+}
