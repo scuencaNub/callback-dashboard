@@ -21,6 +21,9 @@
 2.sam-callbacks-endpoints/env.local.json
 2.sam-callbacks-endpoints/env.json
 
+# deploy exports — contiene credenciales STS temporales, no commitear
+1.sam-callbacks-cognito/deploy_exports.md
+
 # build logs (generated artifacts, not source)
 2.sam-callbacks-endpoints/*_log*.txt
 2.sam-callbacks-endpoints/*_log.txt
