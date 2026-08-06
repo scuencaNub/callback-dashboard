@@ -320,6 +320,55 @@ def lambda_handler(event: Dict[str, Any], context: LambdaContext) -> Dict[str, A
         rows = _build_rows(registered, registeredEnrich, notRegistered, scheduleService)
         items = _aggregate(rows, date, limitAsap, limitSchedule)
 
+        # enrich each bucket with rejection_count from CallbackConcurrencyMetrics table,
+        # written by the BPAC-PRD-CallbackConcurrencyAnalyze lambda (runs every 5 min).
+        # uses batch_get_item to fetch all buckets in one round-trip.
+        # if a bucket has no entry in the metrics table (e.g. no saturation events yet),
+        # rejection_count defaults to 0.
+        concurrencyMetricsTableName = os.environ.get('AWS_DYNAMODB_CONCURRENCY_METRICS_TABLE_NAME', '')
+        if concurrencyMetricsTableName and items:
+            try:
+                import boto3 as _boto3
+                ddb_client = _boto3.client(
+                    'dynamodb',
+                    region_name=os.environ.get('AWS_DYNAMODB_REGION', '') or None
+                )
+                keys = [
+                    {
+                        '{queue_name}#{date}': {'S': f"{b['queue_name']}#{b['date']}"},
+                        '{time_slot}#{callback_type}': {'S': f"{b['time_slot']}#{b['callback_type']}"},
+                    }
+                    for b in items
+                ]
+                rejection_map: Dict[str, int] = {}
+                for i in range(0, len(keys), 100):
+                    chunk = keys[i:i + 100]
+                    resp = ddb_client.batch_get_item(
+                        RequestItems={
+                            concurrencyMetricsTableName: {
+                                'Keys': chunk,
+                                'ProjectionExpression': '#pk, #sk, rejection_count',
+                                'ExpressionAttributeNames': {
+                                    '#pk': '{queue_name}#{date}',
+                                    '#sk': '{time_slot}#{callback_type}',
+                                },
+                            }
+                        }
+                    )
+                    for row in resp.get('Responses', {}).get(concurrencyMetricsTableName, []):
+                        pk = row['{queue_name}#{date}']['S']
+                        sk = row['{time_slot}#{callback_type}']['S']
+                        rej_raw = row.get('rejection_count', {})
+                        rejection_map[f'{pk}|{sk}'] = int(rej_raw.get('N', 0))
+
+                for b in items:
+                    lookup = f"{b['queue_name']}#{b['date']}|{b['time_slot']}#{b['callback_type']}"
+                    b['rejection_count'] = rejection_map.get(lookup, 0)
+            except Exception as enrich_err:
+                logger.warning(f'Could not enrich rejection_count: {enrich_err}. Defaulting to 0.')
+                for b in items:
+                    b['rejection_count'] = 0
+
         return HttpResponseFactory.create(
             200,
             {'items': items, 'count': len(items)},

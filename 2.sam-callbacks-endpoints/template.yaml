@@ -1074,6 +1074,7 @@ Resources:
           AWS_DYNAMODB_QUEUE_OPERATION_HOURS_TABLE_NAME: !Ref QueueOperationHoursTableName
           LIMIT_ASAP: !Ref CallbackLimitAsap
           LIMIT_SCHEDULE: !Ref CallbackLimitSchedule
+          AWS_DYNAMODB_CONCURRENCY_METRICS_TABLE_NAME: !Ref CallbackConcurrencyMetricsTableName
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref ActiveContactsInFlowTableName
@@ -1083,6 +1084,8 @@ Resources:
             TableName: !Ref QueueConfigurationTableName
         - DynamoDBReadPolicy:
             TableName: !Ref QueueOperationHoursTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref CallbackConcurrencyMetricsTableName
       Events:
         GetCallbackConcurrencyMetrics:
           Type: Api

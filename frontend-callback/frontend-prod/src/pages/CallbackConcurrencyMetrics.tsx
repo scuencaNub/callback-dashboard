@@ -76,6 +76,8 @@ export default function CallbackConcurrencyMetrics() {
                 return metric.utilization_pct ?? null
             case 'scheduling_rate_pct':
                 return metric.scheduling_rate_pct ?? null
+            case 'rejection_count':
+                return metric.rejection_count ?? null
             default:
                 return metric[column] ?? null
         }
@@ -87,7 +89,7 @@ export default function CallbackConcurrencyMetrics() {
         }
 
         // Get all unique keys from all metrics (excluding internal keys)
-        const excludedKeys = ['queue_name_date', 'time_slot_callback_type', 'queue_name', 'date', 'time_slot', 'callback_type', 'offered', 'registered', 'enqueued', 'total', 'limit', 'utilization_pct', 'scheduling_rate_pct', 'scheduling_rate_approx']
+        const excludedKeys = ['queue_name_date', 'time_slot_callback_type', 'queue_name', 'date', 'time_slot', 'callback_type', 'offered', 'registered', 'enqueued', 'total', 'limit', 'utilization_pct', 'scheduling_rate_pct', 'scheduling_rate_approx', 'rejection_count']
         const allKeys = new Set<string>()
 
         sortedMetrics.forEach(metric => {
@@ -109,6 +111,7 @@ export default function CallbackConcurrencyMetrics() {
             'Enqueued',
             'Total',
             'Limit',
+            'Rejection Count',
             '% Utilization',
             '% Registration Rate',
             ...Array.from(allKeys).map(key =>
@@ -152,6 +155,7 @@ export default function CallbackConcurrencyMetrics() {
                 String(enqueued),
                 String(total),
                 String(limit),
+                String(metric.rejection_count ?? ''),
                 utilization,
                 schedulingRate,
                 ...additionalFields
@@ -194,9 +198,6 @@ export default function CallbackConcurrencyMetrics() {
     }
 
     const metrics = data?.items || []
-
-    // Outcome/metric fields (shown as fixed columns, excluded from dynamic)
-    const outcomeKeys = ['offered', 'registered', 'enqueued', 'total', 'limit', 'utilization_pct', 'scheduling_rate_pct', 'scheduling_rate_approx']
 
     // --- Data pipeline: unique types → filter → sort ---
     const uniqueCallbackTypes = useMemo(() => {
@@ -391,6 +392,13 @@ export default function CallbackConcurrencyMetrics() {
                                                     {sortState.column === 'limit' && sortState.direction === 'desc' && <ChevronDown className="h-3 w-3" />}
                                                 </div>
                                             </TableHead>
+                                            <TableHead className="cursor-pointer select-none" onClick={() => handleSort('rejection_count')}>
+                                                <div className="flex items-center gap-1">
+                                                    {t({ id: 'concurrencyMetrics.rejectionCount' })}
+                                                    {sortState.column === 'rejection_count' && sortState.direction === 'asc' && <ChevronUp className="h-3 w-3" />}
+                                                    {sortState.column === 'rejection_count' && sortState.direction === 'desc' && <ChevronDown className="h-3 w-3" />}
+                                                </div>
+                                            </TableHead>
                                             <TableHead className="cursor-pointer select-none" onClick={() => handleSort('utilization_pct')}>
                                                 <div className="flex items-center gap-1">
                                                     {t({ id: 'concurrencyMetrics.utilization' })}
@@ -407,7 +415,7 @@ export default function CallbackConcurrencyMetrics() {
                                             </TableHead>
                                             {/* Dynamic columns for additional fields */}
                                             {metrics.length > 0 && Object.keys(metrics[0])
-                                                .filter(key => !['queue_name_date', 'time_slot_callback_type', 'queue_name', 'date', 'time_slot', 'callback_type', ...outcomeKeys].includes(key))
+                                                .filter(key => !['queue_name_date', 'time_slot_callback_type', 'queue_name', 'date', 'time_slot', 'callback_type', 'offered', 'registered', 'enqueued', 'total', 'limit', 'utilization_pct', 'scheduling_rate_pct', 'scheduling_rate_approx', 'rejection_count'].includes(key))
                                                 .map((key) => (
                                                     <TableHead key={key} className="cursor-pointer select-none" onClick={() => handleSort(key)}>
                                                         <div className="flex items-center gap-1">
@@ -432,6 +440,7 @@ export default function CallbackConcurrencyMetrics() {
                                                 <TableCell>{metric.enqueued ?? '-'}</TableCell>
                                                 <TableCell>{metric.total ?? '-'}</TableCell>
                                                 <TableCell>{metric.limit ?? '-'}</TableCell>
+                                                <TableCell>{metric.rejection_count ?? '-'}</TableCell>
                                                 <TableCell>{metric.utilization_pct != null ? `${metric.utilization_pct}%` : '-'}</TableCell>
                                                 <TableCell>
                                                     {metric.scheduling_rate_pct != null
@@ -442,7 +451,7 @@ export default function CallbackConcurrencyMetrics() {
                                                 </TableCell>
                                                 {/* Dynamic cells for additional fields */}
                                                 {Object.keys(metric)
-                                                    .filter(key => !['queue_name_date', 'time_slot_callback_type', 'queue_name', 'date', 'time_slot', 'callback_type', ...outcomeKeys].includes(key))
+                                                    .filter(key => !['queue_name_date', 'time_slot_callback_type', 'queue_name', 'date', 'time_slot', 'callback_type', 'offered', 'registered', 'enqueued', 'total', 'limit', 'utilization_pct', 'scheduling_rate_pct', 'scheduling_rate_approx', 'rejection_count'].includes(key))
                                                     .map((key) => (
                                                         <TableCell key={key}>
                                                             {typeof metric[key] === 'object'
