@@ -119,6 +119,14 @@ Parameters:
     Type: String
     Description: Name of the DynamoDB table indexing CallsInSystem by (queue_name, cb_registered_at), kept in sync via DynamoDB Streams
     Default: ""
+  QueueAssociationTableName:
+    Type: String
+    Description: Name of the DynamoDB table mapping queue_arn to queue metadata (QueueAssociation)
+    Default: "BPAC-PRD-BPPR-ACE-TableQueueAssociation-1K0NXHD0SXCEP"
+  NotAcceptedDetailTableName:
+    Type: String
+    Description: Name of the DynamoDB table for not-accepted callback detail records
+    Default: "BPAC-PRD-Callback-NotAcceptedDetail"
 
 # Conditions:
 #   IsProd: !Equals [!Ref Environment, prd]
@@ -1236,6 +1244,46 @@ Resources:
             Path: /queue-group-info/{queue_group_name}
             Method: options
       AutoPublishAlias: live
+
+  GetCallbackNotAcceptedDetailFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_callback_not_accepted_detail/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_NOT_ACCEPTED_TABLE_NAME: !Ref NotAcceptedDetailTableName
+          AWS_DYNAMODB_QUEUE_ASSOCIATION_TABLE_NAME: !Ref QueueAssociationTableName
+          AWS_DYNAMODB_QUEUE_CONFIG_TABLE_NAME: !Ref QueueConfigurationTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref NotAcceptedDetailTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref QueueAssociationTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref QueueConfigurationTableName
+      Events:
+        GetCallbackNotAcceptedDetail:
+          Type: Api
+          Properties:
+            Path: /callback-not-accepted-detail
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetCallbackNotAcceptedDetailOptions:
+          Type: Api
+          Properties:
+            Path: /callback-not-accepted-detail
+            Method: options
+      AutoPublishAlias: live
+
 
 
 Outputs:

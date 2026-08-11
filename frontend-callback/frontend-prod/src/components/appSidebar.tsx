@@ -12,7 +12,8 @@ import {
     PhoneCall,
     RefreshCw,
     Search,
-    SplitSquareVertical
+    SplitSquareVertical,
+    XCircle
 } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
@@ -212,6 +213,14 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                             <Link to="/historical-summary" className="text-black">
                                                 <BarChart3 className="size-4 mr-2 text-black" />
                                                 {intl.formatMessage({ id: 'sidebar.historicalSummary' })}
+                                            </Link>
+                                        </SidebarMenuSubButton>
+                                    </SidebarMenuSubItem>
+                                    <SidebarMenuSubItem>
+                                        <SidebarMenuSubButton asChild className="sidebar-menu-sub-button">
+                                            <Link to="/not-accepted-detail" className="text-black">
+                                                <XCircle className="size-4 mr-2 text-black" />
+                                                {intl.formatMessage({ id: 'sidebar.notAccepted' })}
                                             </Link>
                                         </SidebarMenuSubButton>
                                     </SidebarMenuSubItem>

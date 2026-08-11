@@ -20,6 +20,7 @@ import QueueGroupBehavior from './pages/QueueGroupBehavior'
 import QueueSchedules from './pages/QueueSchedules'
 import RulesAndSchedules from './pages/RulesAndSchedules'
 import Threshold from './pages/Threshold'
+import CallbackNotAcceptedDetail from './pages/CallbackNotAcceptedDetail'
 import BlockedPhoneNumbers from './pages/BlockedAnis'
 
 function App() {
@@ -45,6 +46,7 @@ function App() {
                   <Route path="/connect-contacts/report-by-date" element={<ConnectContactsReportByDate />} />
                   <Route path="/concurrency-metrics" element={<CallbackConcurrencyMetrics />} />
                   <Route path="/historical-summary" element={<CallbackHistoricalSummary />} />
+                  <Route path="/not-accepted-detail" element={<CallbackNotAcceptedDetail />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/blocked-anis" element={<BlockedPhoneNumbers />} />
                   <Route path="/logged-out" element={<LoggedOut />} />
