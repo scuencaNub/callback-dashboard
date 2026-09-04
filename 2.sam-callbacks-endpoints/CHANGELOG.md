@@ -1,5 +1,75 @@
 # Changelog
 
+## BPPR-994 — dashboard de detalle "not accepted" (callback ofrecido, no agendado)
+
+feature nueva completa: pipeline de datos + endpoint + pagina de frontend. release de backend, stack y frontend a beta y prod (cuenta bpac-prd).
+
+### que resuelve
+
+hasta ahora el dashboard solo mostraba totales agregados de callback (offered/registered/enqueued) por slot. no habia forma de ver el detalle de que contactos recibieron la oferta de callback y no llegaron a agendar ("not accepted"), ni por que EWT tenian en ese momento ni por que queue de origen entraron.
+
+### flujo de datos (pipeline)
+
+el pipeline corre de forma independiente al endpoint, en 3 pasos encadenados:
+
+1. **trigger** (`BPAC-PRD-NotAcceptedScheduleTrigger`, lambda disparada por el DynamoDB Stream de `ActiveContactsInFlow`, filtrada a records con `callback_already_offered=true`): por cada contacto que recibio la oferta, crea un schedule one-time en EventBridge Scheduler con delay de 5 minutos (`DELAY_SECONDS`), apuntando a la lambda constructora. el schedule se autoelimina despues de ejecutarse.
+2. **constructora** (`BPAC-PRD-GetNotAcceptedDetail`, invocada por el schedule): a los 5 minutos, revisa si el `contact_id` existe en `CallsInSystem` (agendo). si no existe, enriquece el registro con los campos de `ActiveContactsInFlow` (`ewt_given`, `origin_queue_arn`, `selected_callback_type`, `outcome`, `active_flow`) y lo escribe en la tabla nueva `BPAC-PRD-Callback-NotAcceptedDetail` (GSI `queue_name-start_timestamp-index`).
+3. **flujo de Connect** (`callback inbound - in hours.json`): se agregaron dos parametros dinamicos en todas las invocaciones de `TrackEntry` — `ewt_given` (`$.Attributes.oldest_contact_age_max`, el EWT real al momento de la oferta) y `origin_queue_arn` (`$.Attributes.queue_arn_to_avg`, la queue de origen del cliente en el IVR, distinta de la queue de callback) — mas `InvocationTimeLimitSeconds=8` en todos los nodos. sin este cambio esos dos campos no existian en `ActiveContactsInFlow` y el pipeline no tenia de donde enriquecer.
+
+correccion de datos historicos: 141 registros con `ewt_given` guardado como string literal (bug de un deploy anterior del flujo) se corrigieron via script (`fix_ewt_given.py`) que consulto `GetContactAttributes` por contact_id y actualizo solo ese campo en dynamo (update parcial, sin tocar el resto del item).
+
+### backend — endpoint nuevo (2.sam-callbacks-endpoints)
+
+`GetCallbackNotAcceptedDetailFunction`, `GET /callback-not-accepted-detail`:
+- parametros: `date` (requerido, `YYYY-MM-DD` hora PR) y `callback_queue_name` (opcional; si se omite, itera todas las queues de `QueueConfiguration`)
+- lee `BPAC-PRD-Callback-NotAcceptedDetail` via GSI por queue + rango de fecha (no hace scan completo — la tabla tiene decenas de miles de items)
+- resuelve `origin_queue_arn` -> `origin_queue_name` via `get_item` en `QueueAssociation`, con cache en memoria por invocacion
+- convierte `ewt_given` (segundos, como se guarda en dynamo) a `ewt_given_minutes` con `math.ceil()`, redondeando siempre hacia arriba. el campo en segundos no se expone en la respuesta
+- devuelve `{items: [...], count: N}` ordenado por `start_timestamp`
+
+### backend — stack / template (template.yaml)
+
+decision de arquitectura: las piezas del pipeline (`GetNotAcceptedDetailFunction`, `NotAcceptedScheduleTriggerFunction`, `NotAcceptedSchedulerRole`, el event source mapping sobre el stream de `ActiveContactsInFlow`, y la tabla `NotAcceptedDetailTable`) son **infraestructura compartida de construccion de datos** entre beta y prod (mismas lambdas fisicas, sin sufijo de ambiente, misma cuenta AWS). no estan gestionadas por este template — solo vive aqui el endpoint HTTP.
+
+se aplico en 2 pasos para evitar que el stack intentara borrarlas:
+1. se agrego `DeletionPolicy: Retain` + `UpdateReplacePolicy: Retain` a los 4 recursos mientras seguian en el template, se deployo — CloudFormation los actualizo sin recrearlos (`Replacement: False`)
+2. se removieron los 4 recursos del template — con `Retain` ya vigente, el deploy los desvincula del stack (`DELETE_SKIPPED` en los eventos) sin borrarlos fisicamente. verificado post-deploy: mismo `LastModified` en ambas lambdas, tabla con sus items intactos, event source mapping `Enabled`
+
+el stack de prod nunca tuvo estos 4 recursos en su estado, por lo que su deploy no los menciona en absoluto.
+
+parametros nuevos en `Parameters`: `QueueAssociationTableName`, `NotAcceptedDetailTableName`.
+
+### backend — config de deploy (samconfig-beta.toml / samconfig-prd.toml)
+
+se agregaron los overrides `QueueAssociationTableName` y `NotAcceptedDetailTableName` a ambos entornos, apuntando a las tablas productivas existentes.
+
+### frontend — modulo frontend-prod
+
+- pagina nueva `pages/CallbackNotAcceptedDetail.tsx` + hook `hooks/queries/useCallbackNotAcceptedDetail.ts`, siguiendo el mismo patron que `CallbackConcurrencyMetrics.tsx`
+- agrupa los registros individuales del endpoint por `queue_name + time_slot` (slot de 15 min sobre `start_timestamp`): tabla con Total / Enqueued / Cust Ended / EWT promedio por slot
+- filas expandibles con el detalle de contact_ids (contact_id, start_timestamp en hora PR, origin_queue_name, callback_type, outcome, ewt_given_minutes)
+- sin `outcome` en el registro se interpreta como "cust ended" por default
+- ruta `/not-accepted-detail` (`App.tsx`), item de sidebar (`appSidebar.tsx`), strings i18n en/es (`TranslationProvider.tsx`)
+- config de URL: `VITE_CALLBACK_NOT_ACCEPTED_DETAIL_URL` agregada a `.env.beta.local`, `.env.local` y `.env.prd.local` (esta ultima apuntando al API gateway de prod `4q120yll5c`, no al de beta)
+
+### deploy — pasos por entorno
+
+backend (desde 2.sam-callbacks-endpoints):
+- beta: `sam build --no-cached` y `sam deploy --config-file samconfig-beta.toml --profile bpac-prd`
+- prod: `sam build --no-cached` y `sam deploy --config-file samconfig-prd.toml --profile bpac-prd`
+- validado en beta primero (237 registros de prueba con datos consistentes) antes de promover a prod
+- changeset de prod revisado antes de confirmar: solo `Add`/`Modify` sobre el endpoint nuevo y las versiones/alias normales de las demas lambdas (sync pendiente desde el ultimo deploy), sin `Delete`/`Replace` sobre infra compartida
+
+frontend (desde frontend-callback/frontend-prod):
+- `npm run build -- --mode prd`
+- `aws s3 sync dist/ s3://bpac-prd-callback-frontend --profile bpac-prd --delete`
+- `aws cloudfront create-invalidation --distribution-id E3IYYHAXEF9YDV --paths "/*" --profile bpac-prd`
+
+### pendiente (no incluido en este release)
+
+- importar el flujo de Connect modificado (`callback inbound - in hours.json`) al flujo productivo real en Connect
+- smoke test contra la URL de prod con usuario real autenticado (post-deploy solo se verifico infraestructura, no un request end-to-end autenticado)
+
 ## BPPR-994 — fix horarios PR en historical summary (solo front)
 
 correccion de UI a beta y prod. sin cambios de backend ni de stack.
