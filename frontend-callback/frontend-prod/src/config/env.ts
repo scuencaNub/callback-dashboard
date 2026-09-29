@@ -19,6 +19,7 @@ interface AppConfig {
     updateQueueGroupInfoUrl: string
     blockedAnisInfo: string
     callbackNotAcceptedDetailUrl: string
+    queueAssociationsUrl: string
     environment: string
     debug: boolean
     features: {
@@ -51,7 +52,8 @@ const getConfig = (): AppConfig => {
         queueGroupInfoUrl: import.meta.env.VITE_QUEUE_GROUP_INFO_URL || 'https://6orzydazih.execute-api.us-east-1.amazonaws.com/Prod/queue-group-info',
         updateQueueGroupInfoUrl: import.meta.env.VITE_UPDATE_QUEUE_GROUP_INFO_URL || 'https://6orzydazih.execute-api.us-east-1.amazonaws.com/Prod/queue-group-info',
         blockedAnisInfo: import.meta.env.VITE_BLOCKED_ANIS_URL || 'https://6orzydazih.execute-api.us-east-1.amazonaws.com/Prod/blocked-phone-numbers-info',
-        callbackNotAcceptedDetailUrl: import.meta.env.VITE_CALLBACK_NOT_ACCEPTED_DETAIL_URL || 'https://2p2edmv0b8.execute-api.us-east-1.amazonaws.com/Prod/callback-not-accepted-detail',
+        callbackNotAcceptedDetailUrl: import.meta.env.VITE_CALLBACK_NOT_ACCEPTED_DETAIL_URL || 'https://6orzydazih.execute-api.us-east-1.amazonaws.com/Prod/callback-not-accepted-detail',
+        queueAssociationsUrl: import.meta.env.VITE_QUEUE_ASSOCIATIONS_URL || 'https://6orzydazih.execute-api.us-east-1.amazonaws.com/Prod/queue-associations',
         environment: import.meta.env.VITE_ENVIRONMENT || 'development',
         debug: import.meta.env.VITE_DEBUG === 'true',
         features: {

@@ -13,6 +13,7 @@ import {
     RefreshCw,
     Search,
     SplitSquareVertical,
+    ToggleLeft,
     XCircle
 } from "lucide-react"
 import type * as React from "react"
@@ -175,6 +176,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                                         </SidebarMenuSubButton>
                                     </SidebarMenuSubItem>
                                 </SidebarMenuSub>
+                            </SidebarMenuItem>
+                            {/* QUEUE ASSOCIATIONS (force callback enable) */}
+                            <SidebarMenuItem>
+                                <SidebarMenuButton asChild className="sidebar-menu-button">
+                                    <Link to="/queue-associations" className="text-black">
+                                        <ToggleLeft className="size-4 text-black" />
+                                        <span>{intl.formatMessage({ id: 'sidebar.queueAssociations' })}</span>
+                                    </Link>
+                                </SidebarMenuButton>
                             </SidebarMenuItem>
                             <SidebarMenuItem>
                                 <SidebarMenuButton asChild className="sidebar-menu-button">

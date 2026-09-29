@@ -22,6 +22,7 @@ import RulesAndSchedules from './pages/RulesAndSchedules'
 import Threshold from './pages/Threshold'
 import CallbackNotAcceptedDetail from './pages/CallbackNotAcceptedDetail'
 import BlockedPhoneNumbers from './pages/BlockedAnis'
+import QueueAssociations from './pages/QueueAssociations'
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
                   <Route path="/not-accepted-detail" element={<CallbackNotAcceptedDetail />} />
                   <Route path="/auth/callback" element={<AuthCallback />} />
                   <Route path="/blocked-anis" element={<BlockedPhoneNumbers />} />
+                  <Route path="/queue-associations" element={<QueueAssociations />} />
                   <Route path="/logged-out" element={<LoggedOut />} />
                 </Routes>
               </SidebarInset>

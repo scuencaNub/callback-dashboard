@@ -1284,6 +1284,70 @@ Resources:
             Method: options
       AutoPublishAlias: live
 
+  GetQueueAssociationsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: get_queue_associations/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_QUEUE_ASSOCIATION_TABLE_NAME: !Ref QueueAssociationTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref QueueAssociationTableName
+      Events:
+        GetQueueAssociations:
+          Type: Api
+          Properties:
+            Path: /queue-associations
+            Method: get
+            Auth:
+              Authorizer: CognitoAuthorizer
+        GetQueueAssociationsOptions:
+          Type: Api
+          Properties:
+            Path: /queue-associations
+            Method: options
+      AutoPublishAlias: live
+
+  UpdateQueueAssociationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: update_queue_association/
+      Handler: handler.lambda_handler
+      Runtime: python3.12
+      Architectures:
+        - x86_64
+      Layers:
+        - !Ref SharedLayer
+      Environment:
+        Variables:
+          AWS_DYNAMODB_QUEUE_ASSOCIATION_TABLE_NAME: !Ref QueueAssociationTableName
+          AWS_DYNAMODB_REGION: !Ref DynamoDBRegion
+          AWS_DYNAMODB_URI: !Ref DynamoDBUri
+          ACL_TABLE_NAME: !Ref UserAclTableName
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref QueueAssociationTableName
+        - DynamoDBReadPolicy:
+            TableName: !Ref UserAclTableName
+      Events:
+        UpdateQueueAssociation:
+          Type: Api
+          Properties:
+            Path: /queue-associations
+            Method: put
+            Auth:
+              Authorizer: CognitoAuthorizer
+      AutoPublishAlias: live
+
 
 
 Outputs:
