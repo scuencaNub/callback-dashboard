@@ -51,7 +51,7 @@ Parameters:
   CallbackLimitAsap:
     Type: Number
     Description: Max callbacks per 15-min slot for ASAP (matches MAX_CALLBACKS_PER_SLOT in GetEwtValue)
-    Default: 120
+    Default: 140
   CallbackLimitSchedule:
     Type: Number
     Description: Max callbacks per 15-min slot for SCHEDULE (matches the limit in GetSchedulePrompts)
